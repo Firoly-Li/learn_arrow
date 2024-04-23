@@ -1,3 +1,7 @@
+[workspace]
+members = [ "arrow_flight/client","arrow_flight/server"]
+
+
 [package]
 name = "learn_arrow"
 version = "0.1.0"
@@ -13,7 +17,7 @@ path = "src/server.rs"
 name = "client"
 path = "src/client.rs"
 
-[dependencies]
+[workspace.dependencies]
 arrow = "51.0.0"
 arrow-flight = "51.0.0"
 futures = "0.3.30"

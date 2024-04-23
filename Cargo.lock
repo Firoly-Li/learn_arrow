@@ -466,6 +466,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "client"
+version = "0.1.0"
+dependencies = [
+ "arrow",
+ "arrow-flight",
+ "futures",
+ "prost",
+ "serde",
+ "serde_json",
+ "tokio",
+ "tonic",
+]
+
+[[package]]
 name = "const-random"
 version = "0.1.18"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -875,14 +889,6 @@ checksum = "e2abad23fbc42b3700f2f279844dc832adb2b2eb069b2df918f455c4e18cc646"
 name = "learn_arrow"
 version = "0.1.0"
 dependencies = [
- "arrow",
- "arrow-flight",
- "futures",
- "prost",
- "serde",
- "serde_json",
- "tokio",
- "tonic",
  "tonic-build",
 ]
 
@@ -1442,6 +1448,20 @@ dependencies = [
  "itoa",
  "ryu",
  "serde",
+]
+
+[[package]]
+name = "server"
+version = "0.1.0"
+dependencies = [
+ "arrow",
+ "arrow-flight",
+ "futures",
+ "prost",
+ "serde",
+ "serde_json",
+ "tokio",
+ "tonic",
 ]
 
 [[package]]

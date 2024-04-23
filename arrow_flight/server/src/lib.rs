@@ -1,59 +1,30 @@
-use std::sync::{Arc, Mutex};
+mod state;
+mod executor;
 
-use arrow::{array::RecordBatch, datatypes::Schema, ipc::writer::IpcWriteOptions};
+use arrow::ipc::writer::IpcWriteOptions;
+use arrow_flight::{encode::FlightDataEncoderBuilder, flight_service_server::{FlightService, FlightServiceServer}, utils::flight_data_to_batches, Action, ActionType, Criteria, Empty, FlightData, FlightDescriptor, FlightInfo, HandshakeRequest, HandshakeResponse, PollInfo, PutResult, SchemaAsIpc, SchemaResult, Ticket};
 use futures::{stream::BoxStream, StreamExt, TryStreamExt};
 use prost::{bytes::Bytes, Message};
-use serde::{Deserialize, Serialize};
-use tonic::{metadata::MetadataMap, transport::Server, Request, Response, Status, Streaming};
+use state::State;
+use std::sync::{Arc, Mutex};
+use tonic::{Request, Response, Status, Streaming};
 
-use arrow_flight::{
-    encode::FlightDataEncoderBuilder,
-    flight_service_server::{FlightService, FlightServiceServer},
-    utils::flight_data_to_batches,
-    Action, ActionType, Criteria, Empty, FlightData, FlightDescriptor, FlightInfo,
-    HandshakeRequest, HandshakeResponse, PollInfo, PutResult, SchemaAsIpc, SchemaResult, Ticket,
-};
+use crate::executor::Executor;
 
 
-#[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let test_flight_server = TestFlightServer::new();
-        
-    let addr = "[::1]:50051".parse()?;
-    let server = FlightServiceServer::new(test_flight_server);
-    Server::builder().add_service(server).serve(addr).await?;
-    Ok(())
-}
-
-fn create_handshake_response(_handshake_request: &HandshakeRequest) -> HandshakeResponse {
-    let handshake_response = HandshakeResponse { 
-        protocol_version: 1, 
-        payload: Bytes::from("hello") 
-    };
-    handshake_response
-}
-
-
-
-
-#[derive(Debug, Clone)]
-/// Flight server for testing, with configurable responses
-pub struct TestFlightServer {
-    /// Shared state to configure responses
+/**
+ * 
+ */
+#[derive(Debug,Default,Clone)]
+pub struct FlightServiceImpl {
+     /// Shared state to configure responses
     state: Arc<Mutex<State>>,
 }
 
-impl TestFlightServer {
-    /// Create a `TestFlightServer`
-    pub fn new() -> Self {
-        Self {
-            state: Arc::new(Mutex::new(State::new())),
-        }
-    }
-
-    /// Return an [`FlightServiceServer`] that can be used with a
+impl FlightServiceImpl {
+     /// Return an [`FlightServiceServer`] that can be used with a
     /// [`Server`](tonic::transport::Server)
-    pub fn service(&self) -> FlightServiceServer<TestFlightServer> {
+    pub fn service(&self) -> FlightServiceServer<FlightServiceImpl> {
         // wrap up tonic goop
         FlightServiceServer::new(self.clone())
     }
@@ -66,62 +37,12 @@ impl TestFlightServer {
     }
 }
 
-/// mutable state for the TestFlightServer, captures requests and provides responses
-#[derive(Debug, Default)]
-struct State {
-    /// The last handshake request that was received
-    pub handshake_request: Option<HandshakeRequest>,
-    /// The next response to return from `handshake()`
-    pub handshake_response: Option<Result<HandshakeResponse, Status>>,
-    /// The last `get_flight_info` request received
-    pub get_flight_info_request: Option<FlightDescriptor>,
-    /// The next response to return from `get_flight_info`
-    pub get_flight_info_response: Option<Result<FlightInfo, Status>>,
-    /// The last `poll_flight_info` request received
-    pub poll_flight_info_request: Option<FlightDescriptor>,
-    /// The next response to return from `poll_flight_info`
-    pub poll_flight_info_response: Option<Result<PollInfo, Status>>,
-    /// The last do_get request received
-    pub do_get_request: Option<Ticket>,
-    /// The next response returned from `do_get`
-    pub do_get_response: Option<Vec<Result<RecordBatch, Status>>>,
-    /// The last do_put request received
-    pub do_put_request: Option<Vec<FlightData>>,
-    /// The next response returned from `do_put`
-    pub do_put_response: Option<Vec<Result<PutResult, Status>>>,
-    /// The last do_exchange request received
-    pub do_exchange_request: Option<Vec<FlightData>>,
-    /// The next response returned from `do_exchange`
-    pub do_exchange_response: Option<Vec<Result<FlightData, Status>>>,
-    /// The last list_flights request received
-    pub list_flights_request: Option<Criteria>,
-    /// The next response returned from `list_flights`
-    pub list_flights_response: Option<Vec<Result<FlightInfo, Status>>>,
-    /// The last get_schema request received
-    pub get_schema_request: Option<FlightDescriptor>,
-    /// The next response returned from `get_schema`
-    pub get_schema_response: Option<Result<Schema, Status>>,
-    /// The last list_actions request received
-    pub list_actions_request: Option<Empty>,
-    /// The next response returned from `list_actions`
-    pub list_actions_response: Option<Vec<Result<ActionType, Status>>>,
-    /// The last do_action request received
-    pub do_action_request: Option<Action>,
-    /// The next response returned from `do_action`
-    pub do_action_response: Option<Vec<Result<arrow_flight::Result, Status>>>,
-    /// The last request headers received
-    pub last_request_metadata: Option<MetadataMap>,
-}
 
-impl State {
-    fn new() -> Self {
-        Default::default()
-    }
-}
-
-/// Implement the FlightService trait
+/**
+ * 
+ */
 #[tonic::async_trait]
-impl FlightService for TestFlightServer {
+impl FlightService for FlightServiceImpl {
     type HandshakeStream = BoxStream<'static, Result<HandshakeResponse, Status>>;
     type ListFlightsStream = BoxStream<'static, Result<FlightInfo, Status>>;
     type DoGetStream = BoxStream<'static, Result<FlightData, Status>>;
@@ -134,22 +55,11 @@ impl FlightService for TestFlightServer {
         &self,
         request: Request<Streaming<HandshakeRequest>>,
     ) -> Result<Response<Self::HandshakeStream>, Status> {
-
-        let handshake_request = request.into_inner().message().await?.unwrap();
-        let payload = &handshake_request.payload;
-        let fd: FlightData = FlightData::decode(payload.clone()).unwrap();
-        println!("接收到客户端的消息 FlightData : {:?}", fd);
-
-        // 将 FlightData 转换为 RecordBatch
-        match flight_data_to_batches(&[fd]) {
-            Ok(re) => {
-                println!("RecordBatch: {:?}", re);
-            }
-            Err(e) => println!("e = {:?}", e),
-        };
-        // 构建 handshake_response
-        let handshake_response = create_handshake_response(&handshake_request);
-            
+        // 1. 获取 HandshakeRequest
+        let handshake_request: HandshakeRequest = request.into_inner().message().await?.unwrap();
+    
+        // 2、构建 handshake_response
+        let handshake_response = handshake_request.execute().unwrap();
         // 构建 response
         let output = futures::stream::iter(std::iter::once(Ok(handshake_response)));
         Ok(Response::new(output.boxed()))
@@ -361,27 +271,4 @@ impl FlightService for TestFlightServer {
 
         Ok(Response::new(stream.boxed()))
     }
-}
-
-
-
-
-#[derive(Serialize,Deserialize)]
-struct MyStruct {
-    int32: i32,
-    string: String,
-}
-
-
-
-#[cfg(test)]
-mod tests {
-    use arrow_flight::FlightData;
-
-    fn create_flight_data() {
-        FlightData::from(value)
-    }
-
-    #[test]
-    fn test() {}
 }
