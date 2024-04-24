@@ -1,5 +1,6 @@
 mod executor;
 mod state;
+mod db;
 
 use arrow::{array::{RecordBatch, UInt64Array}, ipc::writer::IpcWriteOptions};
 use arrow_flight::{
@@ -12,7 +13,7 @@ use futures::{stream::BoxStream, StreamExt, TryStreamExt};
 use state::State;
 use std::sync::Arc;
 use tokio::sync::Mutex;
-use tonic::{Request, Response, Status, Streaming};
+use tonic::{Request, Response, Status, Streaming,Result};
 
 use crate::executor::Executor;
 
@@ -57,17 +58,25 @@ impl FlightService for FlightServiceImpl {
     type ListActionsStream = BoxStream<'static, Result<ActionType, Status>>;
     type DoExchangeStream = BoxStream<'static, Result<FlightData, Status>>;
 
+
+    
     async fn handshake(
         &self,
         request: Request<Streaming<HandshakeRequest>>,
     ) -> Result<Response<Self::HandshakeStream>, Status> {
+        println!("接收到客户端的HandshakeRequest报文！");
         // 1. 获取 HandshakeRequest
         let handshake_request: HandshakeRequest = request.into_inner().message().await?.unwrap();
         // 2、构建 handshake_response
-        let handshake_response = handshake_request.execute().unwrap();
-        // 3、构建 response
-        let output = futures::stream::iter(std::iter::once(Ok(handshake_response)));
-        Ok(Response::new(output.boxed()))
+        match handshake_request.execute() {
+            Ok(handshake_response) => {
+                // 3、构建 response
+                let output = futures::stream::iter(std::iter::once(Ok(handshake_response)));
+                Ok(Response::new(output.boxed()))
+            },
+            Err(status) => Err(status),
+            
+        }
     }
 
     /**
@@ -79,7 +88,7 @@ impl FlightService for FlightServiceImpl {
         request: Request<Criteria>,
     ) -> Result<Response<Self::ListFlightsStream>, Status> {
         self.save_metadata(&request).await;
-        let flights = request.execute();
+        let flights = request.into_inner().execute();
         let flights_stream = futures::stream::iter(flights);
         Ok(Response::new(flights_stream.boxed()))
     }
@@ -94,7 +103,8 @@ impl FlightService for FlightServiceImpl {
     ) -> Result<Response<FlightInfo>, Status> {
         self.save_metadata(&request).await;
         let mut state = self.state.lock().await;
-        state.get_flight_info_request = Some(request.into_inner());
+        // state.get_flight_info_request = Some(request.into_inner());
+        let inner = request.into_inner();
         let response = state
             .get_flight_info_response
             .take()
@@ -149,11 +159,7 @@ impl FlightService for FlightServiceImpl {
         &self,
         request: Request<Ticket>,
     ) -> Result<Response<Self::DoGetStream>, Status> {
-        // self.save_metadata(&request).await;
-        // let mut state = self.state.lock().await;
-        // state.do_get_request = Some(request.into_inner());
-
-        let resp = request.execute();
+        let resp = request.into_inner().execute();
         
         let batch_stream = futures::stream::iter(resp).map_err(Into::into);
 

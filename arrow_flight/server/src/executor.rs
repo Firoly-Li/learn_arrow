@@ -8,8 +8,7 @@ use arrow_flight::{
 
 use prost::bytes::Bytes;
 use serde::Serialize;
-use tonic::{Request, Status};
-use anyhow::Result;
+use tonic::{Request, Status,Result};
 
 /**
  * 执行器
@@ -24,7 +23,7 @@ pub trait Executor {
  * HandshakeRequest 执行器
  */
 impl Executor for HandshakeRequest {
-    type Response = Result<HandshakeResponse, String>;
+    type Response = Result<HandshakeResponse, Status>;
 
     fn execute(&self) -> Self::Response {
         let handshake_response = HandshakeResponse {
@@ -38,7 +37,7 @@ impl Executor for HandshakeRequest {
 /**
  * 请求执行器
  */
-impl Executor for Request<Criteria> {
+impl Executor for Criteria {
     // type Response = Result<Vec<FlightInfo>, Status>;
     type Response = Vec<Result<FlightInfo,Status>>;
     fn execute(&self) -> Self::Response {
@@ -65,7 +64,7 @@ fn test_flight_info(request: &FlightDescriptor) -> FlightInfo {
 
 
 
-impl Executor for Request<Ticket>  {
+impl Executor for Ticket  {
     type Response = Vec<Result<RecordBatch,Status>>;
 
     fn execute(&self) -> Self::Response {
@@ -83,7 +82,7 @@ struct MyStruct {
     string: String,
 }
 
-fn create_batch(n: i32) -> Result<RecordBatch ,Status>{
+fn create_batch(n: i32) -> Result<RecordBatch ,Status> {
     let schema = Schema::new(vec![
         Field::new("int32", DataType::Int32, false),
         Field::new("string", DataType::Utf8, false),

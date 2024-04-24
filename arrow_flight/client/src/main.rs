@@ -6,7 +6,7 @@ use arrow::{
     json::ReaderBuilder,
 };
 
-use arrow_flight::{utils::batches_to_flight_data, FlightClient, FlightData, Ticket};
+use arrow_flight::{utils::batches_to_flight_data, FlightClient, FlightData, HandshakeRequest, Ticket};
 
 use prost::bytes::{Bytes, BytesMut};
 use prost::Message;
@@ -14,12 +14,14 @@ use serde::Serialize;
 use tonic::transport::Channel;
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    if let Ok(channel) = Channel::from_static("http://192.168.3.223:50051")
+    let remote_url = "http://192.168.3.223:50051";
+    let local_url = "http://localhost:50051";
+    if let Ok(channel) = Channel::from_static(local_url)
         .connect()
         .await
     {
         let mut client = FlightClient::new(channel);
-        test_handshake(&mut client).await;
+        let resp = test_handshake(&mut client).await;
     } else {
         println!("客户端连接失败！");
     }
@@ -36,6 +38,10 @@ async fn test_handshake(client: &mut FlightClient) {
         let fd: FlightData = batch[0].clone();
         let _ = fd.encode(&mut buf);
         let bytes = buf.freeze();
+        // let request = HandshakeRequest{
+        //     protocol_version: todo!(),
+        //     payload: todo!(),
+        // };
         let response = client
             .handshake(bytes)
             .await
