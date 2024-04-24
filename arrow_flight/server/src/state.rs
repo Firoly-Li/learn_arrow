@@ -1,7 +1,9 @@
 use arrow::{array::RecordBatch, datatypes::Schema};
-use arrow_flight::{Action, ActionType, Criteria, Empty, FlightData, FlightDescriptor, FlightInfo, HandshakeRequest, HandshakeResponse, PollInfo, PutResult, Ticket};
+use arrow_flight::{
+    Action, ActionType, Criteria, Empty, FlightData, FlightDescriptor, FlightInfo,
+    HandshakeRequest, HandshakeResponse, PollInfo, PutResult, Ticket,
+};
 use tonic::{metadata::MetadataMap, Status};
-
 
 /// mutable state for the TestFlightServer, captures requests and provides responses
 #[derive(Debug, Default)]
@@ -48,10 +50,4 @@ pub struct State {
     pub do_action_response: Option<Vec<Result<arrow_flight::Result, Status>>>,
     /// The last request headers received
     pub last_request_metadata: Option<MetadataMap>,
-}
-
-impl State {
-    fn new() -> Self {
-        Default::default()
-    }
 }

@@ -6,21 +6,31 @@ use arrow::{
     json::ReaderBuilder,
 };
 
-use arrow_flight::{utils::batches_to_flight_data, FlightClient, FlightData};
+use arrow_flight::{utils::batches_to_flight_data, FlightClient, FlightData, Ticket};
 
-use prost::bytes::BytesMut;
+use prost::bytes::{Bytes, BytesMut};
 use prost::Message;
 use serde::Serialize;
 use tonic::transport::Channel;
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let channel = Channel::from_static("http://localhost:50051")
+    if let Ok(channel) = Channel::from_static("http://192.168.3.223:50051")
         .connect()
         .await
-        .expect("error connecting");
+    {
+        let mut client = FlightClient::new(channel);
+        test_handshake(&mut client).await;
+    } else {
+        println!("客户端连接失败！");
+    }
+    Ok(())
+}
 
-    let mut client = FlightClient::new(channel);
 
+/**
+ * 测试握手协议
+ */
+async fn test_handshake(client: &mut FlightClient) {
     if let Ok(batch) = create_batch() {
         let mut buf = BytesMut::new();
         let fd: FlightData = batch[0].clone();
@@ -30,10 +40,30 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             .handshake(bytes)
             .await
             .expect("--------------------------------------------------");
-        println!("response = {:?}", response);
+        println!("服务端返回的消息： {:?}", response);
     }
-    Ok(())
 }
+
+
+/**
+ * 测试获取数据
+ */
+async fn test_do_get(client: &mut FlightClient) {
+    let ticket = Ticket {
+        ticket: Bytes::from_static("bytes".as_bytes()),
+    };
+    let resp = client
+            .do_get(ticket)
+            .await
+            .expect("--------------------------------------------------");
+    println!("resp: {:?}", resp);
+}
+
+
+
+
+
+
 
 #[derive(Serialize)]
 struct MyStruct {
@@ -74,9 +104,11 @@ mod tests {
     use std::sync::Arc;
 
     use arrow::{
-        array::RecordBatch, datatypes::{DataType, Field, Schema}, json::ReaderBuilder
+        array::RecordBatch,
+        datatypes::{DataType, Field, Schema},
+        json::ReaderBuilder,
     };
-    use arrow_flight::{utils::{batches_to_flight_data, flight_data_to_batches}, FlightData};
+    use arrow_flight::utils::{batches_to_flight_data, flight_data_to_batches};
     use serde::{Deserialize, Serialize};
 
     #[derive(Debug, Serialize, Deserialize)]
@@ -118,11 +150,11 @@ mod tests {
     }
 
     #[test]
-    fn record_batch_to_flight_data_test(){
+    fn record_batch_to_flight_data_test() {
         let batch = create_record_batch();
         println!("batch = {:?}", batch);
         let batches = vec![batch.clone()];
-        let fd = batches_to_flight_data(&batch.schema(),batches).unwrap();
+        let fd = batches_to_flight_data(&batch.schema(), batches).unwrap();
         println!("flight_data = {:?}", fd);
     }
 
@@ -133,29 +165,27 @@ mod tests {
         println!("batch = {:?}", batch);
         // 2. convert record batch to flight data
         let batches = vec![batch.clone()];
-        let fd = batches_to_flight_data(&batch.schema(),batches).unwrap();
+        let fd = batches_to_flight_data(&batch.schema(), batches).unwrap();
         println!("flight_data = {:?}", fd);
-        
+
         // 3. exchange flight data to record batch
         let batch: Vec<RecordBatch> = flight_data_to_batches(&fd).unwrap();
 
         println!("bacth = {:?}", batch);
 
         //RecordBatch {
-        //    schema: Schema { 
+        //    schema: Schema {
         //      fields: [
-        //        Field { name: "int32", data_type: Int32, nullable: false, dict_id: 0, dict_is_ordered: false, metadata: {} }, 
+        //        Field { name: "int32", data_type: Int32, nullable: false, dict_id: 0, dict_is_ordered: false, metadata: {} },
         //        Field { name: "string", data_type: Utf8, nullable: false, dict_id: 0, dict_is_ordered: false, metadata: {} }
-        //      ], 
-        //      metadata: {} 
-        //    }, 
+        //      ],
+        //      metadata: {}
+        //    },
         //    columns: [
         //      PrimitiveArray<Int32>[5,8,],
         //      StringArray["bar","foo",]
-        //    ], 
-        //    row_count: 2 
+        //    ],
+        //    row_count: 2
         //  }
     }
-
-    
 }

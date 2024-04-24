@@ -1,28 +1,35 @@
-mod state;
 mod executor;
+mod state;
 
-use arrow::ipc::writer::IpcWriteOptions;
-use arrow_flight::{encode::FlightDataEncoderBuilder, flight_service_server::{FlightService, FlightServiceServer}, utils::flight_data_to_batches, Action, ActionType, Criteria, Empty, FlightData, FlightDescriptor, FlightInfo, HandshakeRequest, HandshakeResponse, PollInfo, PutResult, SchemaAsIpc, SchemaResult, Ticket};
+use arrow::{array::{RecordBatch, UInt64Array}, ipc::writer::IpcWriteOptions};
+use arrow_flight::{
+    encode::FlightDataEncoderBuilder,
+    flight_service_server::{FlightService, FlightServiceServer},
+    Action, ActionType, Criteria, Empty, FlightData, FlightDescriptor, FlightInfo,
+    HandshakeRequest, HandshakeResponse, PollInfo, PutResult, SchemaAsIpc, SchemaResult, Ticket,
+};
 use futures::{stream::BoxStream, StreamExt, TryStreamExt};
-use prost::{bytes::Bytes, Message};
 use state::State;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
+use tokio::sync::Mutex;
 use tonic::{Request, Response, Status, Streaming};
 
 use crate::executor::Executor;
 
-
 /**
- * 
+ *  FlightServiceImpl
  */
-#[derive(Debug,Default,Clone)]
+#[derive(Debug, Default, Clone)]
 pub struct FlightServiceImpl {
-     /// Shared state to configure responses
+    /// Shared state to configure responses
     state: Arc<Mutex<State>>,
 }
 
+unsafe impl Send for FlightServiceImpl {}
+// unsafe impl Sync for FlightServiceImpl {}
+
 impl FlightServiceImpl {
-     /// Return an [`FlightServiceServer`] that can be used with a
+    /// Return an [`FlightServiceServer`] that can be used with a
     /// [`Server`](tonic::transport::Server)
     pub fn service(&self) -> FlightServiceServer<FlightServiceImpl> {
         // wrap up tonic goop
@@ -30,16 +37,15 @@ impl FlightServiceImpl {
     }
 
     /// Save the last request's metadatacom
-    fn save_metadata<T>(&self, request: &Request<T>) {
+    async fn save_metadata<T>(&self, request: &Request<T>) {
         let metadata = request.metadata().clone();
-        let mut state = self.state.lock().expect("mutex not poisoned");
+        let mut state = self.state.lock().await;
         state.last_request_metadata = Some(metadata);
     }
 }
 
-
 /**
- * 
+ *
  */
 #[tonic::async_trait]
 impl FlightService for FlightServiceImpl {
@@ -57,10 +63,9 @@ impl FlightService for FlightServiceImpl {
     ) -> Result<Response<Self::HandshakeStream>, Status> {
         // 1. 获取 HandshakeRequest
         let handshake_request: HandshakeRequest = request.into_inner().message().await?.unwrap();
-    
         // 2、构建 handshake_response
         let handshake_response = handshake_request.execute().unwrap();
-        // 构建 response
+        // 3、构建 response
         let output = futures::stream::iter(std::iter::once(Ok(handshake_response)));
         Ok(Response::new(output.boxed()))
     }
@@ -73,18 +78,9 @@ impl FlightService for FlightServiceImpl {
         &self,
         request: Request<Criteria>,
     ) -> Result<Response<Self::ListFlightsStream>, Status> {
-        self.save_metadata(&request);
-        let mut state = self.state.lock().expect("mutex not poisoned");
-
-        state.list_flights_request = Some(request.into_inner());
-
-        let flights: Vec<_> = state
-            .list_flights_response
-            .take()
-            .ok_or_else(|| Status::internal("No list_flights response configured"))?;
-
+        self.save_metadata(&request).await;
+        let flights = request.execute();
         let flights_stream = futures::stream::iter(flights);
-
         Ok(Response::new(flights_stream.boxed()))
     }
 
@@ -96,8 +92,8 @@ impl FlightService for FlightServiceImpl {
         &self,
         request: Request<FlightDescriptor>,
     ) -> Result<Response<FlightInfo>, Status> {
-        self.save_metadata(&request);
-        let mut state = self.state.lock().expect("mutex not poisoned");
+        self.save_metadata(&request).await;
+        let mut state = self.state.lock().await;
         state.get_flight_info_request = Some(request.into_inner());
         let response = state
             .get_flight_info_response
@@ -110,8 +106,8 @@ impl FlightService for FlightServiceImpl {
         &self,
         request: Request<FlightDescriptor>,
     ) -> Result<Response<PollInfo>, Status> {
-        self.save_metadata(&request);
-        let mut state = self.state.lock().expect("mutex not poisoned");
+        self.save_metadata(&request).await;
+        let mut state = self.state.lock().await;
         state.poll_flight_info_request = Some(request.into_inner());
         let response = state
             .poll_flight_info_response
@@ -127,8 +123,8 @@ impl FlightService for FlightServiceImpl {
         &self,
         request: Request<FlightDescriptor>,
     ) -> Result<Response<SchemaResult>, Status> {
-        self.save_metadata(&request);
-        let mut state = self.state.lock().expect("mutex not poisoned");
+        self.save_metadata(&request).await;
+        let mut state = self.state.lock().await;
         state.get_schema_request = Some(request.into_inner());
         let schema = state
             .get_schema_response
@@ -153,17 +149,13 @@ impl FlightService for FlightServiceImpl {
         &self,
         request: Request<Ticket>,
     ) -> Result<Response<Self::DoGetStream>, Status> {
-        self.save_metadata(&request);
-        let mut state = self.state.lock().expect("mutex not poisoned");
+        // self.save_metadata(&request).await;
+        // let mut state = self.state.lock().await;
+        // state.do_get_request = Some(request.into_inner());
 
-        state.do_get_request = Some(request.into_inner());
-
-        let batches: Vec<_> = state
-            .do_get_response
-            .take()
-            .ok_or_else(|| Status::internal("No do_get response configured"))?;
-
-        let batch_stream = futures::stream::iter(batches).map_err(Into::into);
+        let resp = request.execute();
+        
+        let batch_stream = futures::stream::iter(resp).map_err(Into::into);
 
         let stream = FlightDataEncoderBuilder::new()
             .build(batch_stream)
@@ -185,12 +177,9 @@ impl FlightService for FlightServiceImpl {
         &self,
         request: Request<Streaming<FlightData>>,
     ) -> Result<Response<Self::DoPutStream>, Status> {
-        self.save_metadata(&request);
-        println!("request = {:?}", request);
         let do_put_request: Vec<_> = request.into_inner().try_collect().await?;
 
-        let mut state = self.state.lock().expect("mutex not poisoned");
-
+        let mut state = self.state.lock().await;
         state.do_put_request = Some(do_put_request);
 
         let response = state
@@ -212,9 +201,8 @@ impl FlightService for FlightServiceImpl {
         &self,
         request: Request<Action>,
     ) -> Result<Response<Self::DoActionStream>, Status> {
-        self.save_metadata(&request);
-        let mut state = self.state.lock().expect("mutex not poisoned");
-
+        self.save_metadata(&request).await;
+        let mut state = self.state.lock().await;
         state.do_action_request = Some(request.into_inner());
 
         let results: Vec<_> = state
@@ -231,9 +219,8 @@ impl FlightService for FlightServiceImpl {
         &self,
         request: Request<Empty>,
     ) -> Result<Response<Self::ListActionsStream>, Status> {
-        self.save_metadata(&request);
-        let mut state = self.state.lock().expect("mutex not poisoned");
-
+        self.save_metadata(&request).await;
+        let mut state = self.state.lock().await;
         state.list_actions_request = Some(request.into_inner());
 
         let actions: Vec<_> = state
@@ -242,7 +229,6 @@ impl FlightService for FlightServiceImpl {
             .ok_or_else(|| Status::internal("No list_actions response configured"))?;
 
         let action_stream = futures::stream::iter(actions);
-
         Ok(Response::new(action_stream.boxed()))
     }
 
@@ -255,20 +241,15 @@ impl FlightService for FlightServiceImpl {
         &self,
         request: Request<Streaming<FlightData>>,
     ) -> Result<Response<Self::DoExchangeStream>, Status> {
-        self.save_metadata(&request);
         let do_exchange_request: Vec<_> = request.into_inner().try_collect().await?;
-
-        let mut state = self.state.lock().expect("mutex not poisoned");
-
+        let mut state = self.state.lock().await;
         state.do_exchange_request = Some(do_exchange_request);
 
         let response = state
             .do_exchange_response
             .take()
             .ok_or_else(|| Status::internal("No do_exchange response configured"))?;
-
         let stream = futures::stream::iter(response).map_err(Into::into);
-
         Ok(Response::new(stream.boxed()))
     }
 }
