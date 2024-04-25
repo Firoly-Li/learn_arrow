@@ -1,0 +1,15 @@
+[package]
+name = "datafusion_server"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+anyhow = "1.0.82"
+arrow = {workspace = true }
+datafusion = "37.1.0"
+futures.workspace = true
+futures-util = "0.3.30"
+parquet = { version = "51.0.0", features = ["arrow"] }
+tokio = { workspace = true}

@@ -1,5 +1,5 @@
 [workspace]
-members = [ "arrow_flight/client","arrow_flight/server"]
+members = [ "arrow_flight/client","arrow_flight/server", "datafusion/server"]
 
 
 [package]
