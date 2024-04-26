@@ -2,7 +2,7 @@ use arrow::{
     array::{Int32Array, RecordBatch, UInt64Array},
     datatypes::{DataType, Field, Schema},
 };
-use datafusion::{datasource::MemTable, execution::context::SessionContext};
+use datafusion::{datasource::MemTable, execution::{context::SessionContext, options::ParquetReadOptions}, logical_expr::{col, lit, table_scan, Literal, LogicalPlanBuilder}};
 use std::sync::Arc;
 
 #[tokio::main]
@@ -11,7 +11,9 @@ async fn main() {
     let table = Arc::new(table);
     let context = SessionContext::new();
     sql_select_test(table.clone(), &context).await;
-    api_select_test(table.clone(), &context).await;
+    // api_select_test(table.clone(), &context).await;
+
+    // select_test(&context).await;
 }
 
 /**
@@ -26,6 +28,20 @@ async fn api_select_test(table: Arc<MemTable>, context: &SessionContext) {
             .await
             .unwrap();
         println!("data = {:?}", data);
+    }
+}
+
+/**
+ * 查询Parquet文件中的指定列的所有数据
+ */
+async fn select_test(ctx: &SessionContext) {
+    let table_paths = "test/example.tssp";
+    let mut options = ParquetReadOptions::default();
+    options.file_extension = "tssp";
+    if let Ok(df) = ctx.read_parquet(table_paths, options).await {
+        // let expr = col("name").eq(lit(Int32(Some(1))));
+        let resp = df.select_columns(&["name"]).unwrap().collect().await.unwrap();
+    println!("resp = {:?}", resp);
     }
 }
 
