@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{path::{self, Path}, sync::Arc};
 
 use arrow::{
     datatypes::{DataType, Field, Schema},
@@ -6,7 +6,9 @@ use arrow::{
     json::ReaderBuilder,
 };
 
-use arrow_flight::{utils::batches_to_flight_data, BasicAuth, FlightClient, FlightData, HandshakeRequest, Ticket};
+use arrow_flight::{
+    flight_descriptor, utils::batches_to_flight_data, BasicAuth, FlightClient, FlightData, FlightDescriptor, HandshakeRequest, Ticket
+};
 
 use prost::bytes::{Bytes, BytesMut};
 use prost::Message;
@@ -16,19 +18,15 @@ use tonic::transport::Channel;
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let remote_url = "http://192.168.3.223:50051";
     let local_url = "http://localhost:50051";
-    if let Ok(channel) = Channel::from_static(local_url)
-        .connect()
-        .await
-    {
-        
+    if let Ok(channel) = Channel::from_static(local_url).connect().await {
         let mut client = FlightClient::new(channel);
-        let resp = test_handshake(&mut client).await;
+        // let resp = test_handshake(&mut client).await;
+        get_schema_test(&mut client).await;
     } else {
         println!("客户端连接失败！");
     }
     Ok(())
 }
-
 
 /**
  * 测试握手协议
@@ -37,25 +35,25 @@ async fn test_handshake(client: &mut FlightClient) {
     if let Ok(batch) = create_batch() {
         let mut buf = BytesMut::new();
         let auth = BasicAuth {
-            username: String::from_utf8_lossy("lee".as_bytes().to_vec().as_slice()).to_string(),
-            password: String::from_utf8_lossy("123456".as_bytes().to_vec().as_slice()).to_string(),
+            username: "lee".to_string(),
+            password: "123456".to_string(),
         };
         let _ = auth.encode(&mut buf);
-        // let fd: FlightData = batch[0].clone();
-        // let _ = fd.encode(&mut buf);
-        // let bytes = buf.freeze();
-        // let request = HandshakeRequest{
-        //     protocol_version: 1,
-        //     payload: bytes,
-        // };
-        // let mut buf1 = BytesMut::new();
-        // let _ = request.encode(&mut buf1);
         let response = client
             .handshake(buf.freeze())
             .await
             .expect("--------------------------------------------------");
         println!("服务端返回的消息： {:?}", response);
     }
+}
+
+async fn get_schema_test(client: &mut FlightClient) {
+
+    let desc = FlightDescriptor::new_path(vec!["root".to_string()]);
+
+    let resp = client.get_schema(desc).await.unwrap();
+
+    println!("resp: {:?}", resp);
 }
 
 
@@ -67,17 +65,11 @@ async fn test_do_get(client: &mut FlightClient) {
         ticket: Bytes::from_static("bytes".as_bytes()),
     };
     let resp = client
-            .do_get(ticket)
-            .await
-            .expect("--------------------------------------------------");
+        .do_get(ticket)
+        .await
+        .expect("--------------------------------------------------");
     println!("resp: {:?}", resp);
 }
-
-
-
-
-
-
 
 #[derive(Serialize)]
 struct MyStruct {

@@ -2,7 +2,11 @@ use arrow::{
     array::{Int32Array, RecordBatch, UInt64Array},
     datatypes::{DataType, Field, Schema},
 };
-use datafusion::{datasource::MemTable, execution::{context::SessionContext, options::ParquetReadOptions}, logical_expr::{col, lit, table_scan, Literal, LogicalPlanBuilder}};
+use datafusion::{
+    datasource::MemTable,
+    execution::{context::SessionContext, options::ParquetReadOptions},
+    logical_expr::{col, lit, table_scan, Literal, LogicalPlanBuilder},
+};
 use std::sync::Arc;
 
 #[tokio::main]
@@ -40,8 +44,13 @@ async fn select_test(ctx: &SessionContext) {
     options.file_extension = "tssp";
     if let Ok(df) = ctx.read_parquet(table_paths, options).await {
         // let expr = col("name").eq(lit(Int32(Some(1))));
-        let resp = df.select_columns(&["name"]).unwrap().collect().await.unwrap();
-    println!("resp = {:?}", resp);
+        let resp = df
+            .select_columns(&["name"])
+            .unwrap()
+            .collect()
+            .await
+            .unwrap();
+        println!("resp = {:?}", resp);
     }
 }
 

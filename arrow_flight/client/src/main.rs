@@ -6,7 +6,9 @@ use arrow::{
     json::ReaderBuilder,
 };
 
-use arrow_flight::{utils::batches_to_flight_data, FlightClient, FlightData, HandshakeRequest, Ticket};
+use arrow_flight::{
+    utils::batches_to_flight_data, FlightClient, FlightData, HandshakeRequest, Ticket,
+};
 
 use prost::bytes::{Bytes, BytesMut};
 use prost::Message;
@@ -16,10 +18,7 @@ use tonic::transport::Channel;
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let remote_url = "http://192.168.3.223:50051";
     let local_url = "http://localhost:50051";
-    if let Ok(channel) = Channel::from_static(local_url)
-        .connect()
-        .await
-    {
+    if let Ok(channel) = Channel::from_static(local_url).connect().await {
         let mut client = FlightClient::new(channel);
         let resp = test_handshake(&mut client).await;
     } else {
@@ -27,7 +26,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
     Ok(())
 }
-
 
 /**
  * 测试握手协议
@@ -50,7 +48,6 @@ async fn test_handshake(client: &mut FlightClient) {
     }
 }
 
-
 /**
  * 测试获取数据
  */
@@ -59,17 +56,11 @@ async fn test_do_get(client: &mut FlightClient) {
         ticket: Bytes::from_static("bytes".as_bytes()),
     };
     let resp = client
-            .do_get(ticket)
-            .await
-            .expect("--------------------------------------------------");
+        .do_get(ticket)
+        .await
+        .expect("--------------------------------------------------");
     println!("resp: {:?}", resp);
 }
-
-
-
-
-
-
 
 #[derive(Serialize)]
 struct MyStruct {

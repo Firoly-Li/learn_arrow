@@ -1,8 +1,11 @@
+mod db;
 mod executor;
 mod state;
-mod db;
 
-use arrow::{array::{RecordBatch, UInt64Array}, ipc::writer::IpcWriteOptions};
+use arrow::{
+    array::{RecordBatch, UInt64Array},
+    ipc::writer::IpcWriteOptions,
+};
 use arrow_flight::{
     encode::FlightDataEncoderBuilder,
     flight_service_server::{FlightService, FlightServiceServer},
@@ -13,7 +16,7 @@ use futures::{stream::BoxStream, StreamExt, TryStreamExt};
 use state::State;
 use std::sync::Arc;
 use tokio::sync::Mutex;
-use tonic::{Request, Response, Status, Streaming,Result};
+use tonic::{Request, Response, Result, Status, Streaming};
 
 use crate::executor::Executor;
 
@@ -58,8 +61,6 @@ impl FlightService for FlightServiceImpl {
     type ListActionsStream = BoxStream<'static, Result<ActionType, Status>>;
     type DoExchangeStream = BoxStream<'static, Result<FlightData, Status>>;
 
-
-    
     async fn handshake(
         &self,
         request: Request<Streaming<HandshakeRequest>>,
@@ -73,9 +74,8 @@ impl FlightService for FlightServiceImpl {
                 // 3、构建 response
                 let output = futures::stream::iter(std::iter::once(Ok(handshake_response)));
                 Ok(Response::new(output.boxed()))
-            },
+            }
             Err(status) => Err(status),
-            
         }
     }
 
@@ -160,7 +160,7 @@ impl FlightService for FlightServiceImpl {
         request: Request<Ticket>,
     ) -> Result<Response<Self::DoGetStream>, Status> {
         let resp = request.into_inner().execute();
-        
+
         let batch_stream = futures::stream::iter(resp).map_err(Into::into);
 
         let stream = FlightDataEncoderBuilder::new()

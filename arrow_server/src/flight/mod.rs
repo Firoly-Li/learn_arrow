@@ -1,6 +1,8 @@
+use arrow::{datatypes::Schema, ipc::writer::IpcWriteOptions};
 use arrow_flight::{
-    flight_service_server::FlightService, Action, ActionType, BasicAuth, Criteria, Empty, FlightData, FlightDescriptor, FlightInfo, HandshakeRequest, HandshakeResponse, PollInfo, PutResult, SchemaResult, Ticket
+    flight_descriptor::DescriptorType, flight_service_server::FlightService, Action, ActionType, BasicAuth, Criteria, Empty, FlightData, FlightDescriptor, FlightInfo, HandshakeRequest, HandshakeResponse, PollInfo, PutResult, SchemaAsIpc, SchemaResult, Ticket
 };
+use datafusion::execution::{context::SessionContext, options::ParquetReadOptions};
 use futures::{stream::BoxStream, StreamExt};
 use prost::{bytes::Bytes, Message};
 use tonic::{Request, Response, Status, Streaming};
@@ -25,25 +27,28 @@ impl FlightService for FlightServiceImpl {
         &self,
         request: Request<Streaming<HandshakeRequest>>,
     ) -> Result<Response<Self::HandshakeStream>, Status> {
-         // 1. 获取 HandshakeRequest
-         let handshake_request: HandshakeRequest = request.into_inner().message().await?.unwrap();
-         println!("接收到客户端的HandshakeRequest报文：{:?}", handshake_request);
-         let version = handshake_request.protocol_version;
-         let p = handshake_request.payload;
-         let auth = BasicAuth::decode(p);
-         println!("BasicAuth{:?}", auth);
-         match auth {
-             Ok(a) => {
+        // 1. 获取 HandshakeRequest
+        let handshake_request: HandshakeRequest = request.into_inner().message().await?.unwrap();
+        println!(
+            "接收到客户端的HandshakeRequest报文：{:?}",
+            handshake_request
+        );
+        let _version = handshake_request.protocol_version;
+        let p = handshake_request.payload;
+        let auth = BasicAuth::decode(p);
+        println!("BasicAuth{:?}", auth);
+        match auth {
+            Ok(a) => {
                 println!("客户端认证信息：{:?}", a);
                 let handshake_response = HandshakeResponse {
                     protocol_version: 1,
-                    payload: Bytes::from("hello"),
+                    payload: Bytes::from("auth success"),
                 };
                 let output = futures::stream::iter(std::iter::once(Ok(handshake_response)));
                 Ok(Response::new(output.boxed()))
-             },
-             Err(_e) => Err(Status::ok("message")),
-         }
+            }
+            Err(_e) => Err(Status::ok("message")),
+        }
     }
 
     /**
@@ -80,9 +85,33 @@ impl FlightService for FlightServiceImpl {
      */
     async fn get_schema(
         &self,
-        _request: Request<FlightDescriptor>,
+        request: Request<FlightDescriptor>,
     ) -> Result<Response<SchemaResult>, Status> {
-        Err(Status::ok("message"))
+        let request = request.into_inner();
+        let desc_type = request.r#type();
+        match desc_type {
+            DescriptorType::Unknown => Err(Status::ok("message")),
+            DescriptorType::Path => {
+                let paths = request.path;
+                // path 可以是tssp文件的路径，可以通过Parquet读取指定tssp文件获取schema信息
+                let ctx = SessionContext::new();
+                let mut options = ParquetReadOptions::default();
+                options.file_extension = "tssp";
+                if let Ok(df) = ctx.read_parquet("/Users/firoly/Documents/code/rust/learn_rust/learn_arrow/datafusion/server/test/example.tssp", options).await {
+                    let schema: Schema = df.schema().into();
+
+                    // encode the schema
+                    let options = IpcWriteOptions::default();
+                    let response: SchemaResult = SchemaAsIpc::new(&schema, &options)
+                        .try_into()
+                        .expect("Error encoding schema");
+                    Ok(Response::new(response))
+                } else {
+                    Err(Status::ok("message"))
+                }
+            }
+            DescriptorType::Cmd => Err(Status::ok("message")),
+        }
     }
 
     /**

@@ -8,7 +8,6 @@ mod flight;
 mod parquet;
 mod web;
 
-
 /**
  * 启动flight_server
  */
@@ -18,6 +17,6 @@ pub async fn flight_server() -> Result<()> {
     let server = FlightServiceServer::new(test_flight_server);
     println!("flight server will be starting on :{}", addr);
     Server::builder().add_service(server).serve(addr).await?;
-    
+
     Ok(())
 }
