@@ -3,6 +3,9 @@ name = "arrow_server"
 version = "0.1.0"
 edition = "2021"
 
+[[bin]]
+name = "arrow_cli"
+path = "examples/client.rs"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
@@ -18,3 +21,6 @@ tonic = {workspace = true }
 
 datafusion = "37.1.0"
 parquet = { version = "51.0.0", features = ["arrow"] }
+clap = { version = "4.5.4", features = ["derive"] }
+
+

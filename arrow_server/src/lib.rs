@@ -3,6 +3,7 @@ use arrow_flight::flight_service_server::FlightServiceServer;
 use flight::FlightServiceImpl;
 use tonic::transport::Server;
 
+pub mod client;
 mod data_fusion;
 mod flight;
 mod parquet;

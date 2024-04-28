@@ -26,52 +26,6 @@ mod tests {
         basic::Compression,
         file::properties::WriterProperties,
     };
-
-    /**
-     * 构建数据
-     */
-    fn create_batch(n: i32) -> RecordBatch {
-        let schema = Arc::new(Schema::new(vec![
-            Field::new("name", DataType::Int32, false),
-            Field::new("age", DataType::Int32, false),
-            Field::new("address", DataType::Int32, false),
-            Field::new("time", DataType::UInt64, true),
-        ]));
-
-        let batch = RecordBatch::try_new(
-            schema,
-            vec![
-                Arc::new(Int32Array::from(vec![1 + n * 10, 2 + n * 10, 3 + n * 10])),
-                Arc::new(Int32Array::from(vec![4 + n * 10, 5 + n * 10, 6 + n * 10])),
-                Arc::new(Int32Array::from(vec![7 + n * 10, 8 + n * 10, 9 + n * 10])),
-                Arc::new(UInt64Array::from(vec![None, None, Some(9)])),
-            ],
-        )
-        .unwrap();
-        batch
-    }
-
-    fn create_batch1() -> RecordBatch {
-        let schema = Arc::new(Schema::new(vec![
-            Field::new("name", DataType::Int32, false),
-            Field::new("age", DataType::Int32, false),
-            Field::new("address", DataType::Int32, false),
-            Field::new("time", DataType::UInt64, true),
-        ]));
-
-        let batch = RecordBatch::try_new(
-            schema.clone(),
-            vec![
-                Arc::new(Int32Array::from(vec![11, 21, 31])),
-                Arc::new(Int32Array::from(vec![41, 51, 61])),
-                Arc::new(Int32Array::from(vec![71, 81, 91])),
-                Arc::new(UInt64Array::from(vec![Some(81), None, Some(91)])),
-            ],
-        )
-        .unwrap();
-        batch
-    }
-
     /**
      *
      */
@@ -162,6 +116,25 @@ mod tests {
         self::sync_write(1000, "test/example.tssp");
     }
 
+    #[test]
+    fn sync_Write_test1() {
+        self::sync_write1(1000, "test/example1.tssp");
+    }
+
+    fn sync_write1(n: i32, path: &str) {
+        let schema = create_schema();
+        // 写入 Parquet 文件
+        let file = File::create(path).unwrap();
+        let props = WriterProperties::builder()
+            .set_compression(Compression::SNAPPY)
+            .build();
+        let mut writer = ArrowWriter::try_new(file, schema.into(), Some(props)).unwrap();
+        for i in 0..n {
+            writer.write(&create_batch(i)).unwrap();
+        }
+        writer.close().unwrap();
+    }
+
     fn sync_write(n: i32, path: &str) {
         let batch1 = create_batch1();
         // 写入 Parquet 文件
@@ -174,5 +147,56 @@ mod tests {
             writer.write(&create_batch(i)).unwrap();
         }
         writer.close().unwrap();
+    }
+
+    fn create_schema() -> Schema {
+        Schema::new(vec![
+            Field::new("name", DataType::Int32, false),
+            Field::new("age", DataType::Int32, false),
+            Field::new("address", DataType::Int32, false),
+        ])
+    }
+
+    /**
+     * 构建数据
+     */
+    fn create_batch(n: i32) -> RecordBatch {
+        let schema = Arc::new(Schema::new(vec![
+            Field::new("name", DataType::Int32, false),
+            Field::new("age", DataType::Int32, false),
+            Field::new("address", DataType::Int32, false),
+            Field::new("time", DataType::UInt64, true),
+        ]));
+
+        let batch = RecordBatch::try_new(
+            schema,
+            vec![
+                Arc::new(Int32Array::from(vec![1 + n * 10, 2 + n * 10, 3 + n * 10])),
+                Arc::new(Int32Array::from(vec![4 + n * 10, 5 + n * 10, 6 + n * 10])),
+                Arc::new(Int32Array::from(vec![7 + n * 10, 8 + n * 10, 9 + n * 10])),
+                Arc::new(UInt64Array::from(vec![None, None, Some(9)])),
+            ],
+        )
+        .unwrap();
+        batch
+    }
+
+    fn create_batch1() -> RecordBatch {
+        let schema = Arc::new(Schema::new(vec![
+            Field::new("name", DataType::Int32, false),
+            Field::new("age", DataType::Int32, false),
+            Field::new("address", DataType::Int32, false),
+        ]));
+
+        let batch = RecordBatch::try_new(
+            schema.clone(),
+            vec![
+                Arc::new(Int32Array::from(vec![11, 21, 31])),
+                Arc::new(Int32Array::from(vec![41, 51, 61])),
+                Arc::new(Int32Array::from(vec![71, 81, 91])),
+            ],
+        )
+        .unwrap();
+        batch
     }
 }

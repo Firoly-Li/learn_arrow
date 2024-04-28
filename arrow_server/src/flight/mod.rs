@@ -1,6 +1,8 @@
 use arrow::{datatypes::Schema, ipc::writer::IpcWriteOptions};
 use arrow_flight::{
-    flight_descriptor::DescriptorType, flight_service_server::FlightService, Action, ActionType, BasicAuth, Criteria, Empty, FlightData, FlightDescriptor, FlightInfo, HandshakeRequest, HandshakeResponse, PollInfo, PutResult, SchemaAsIpc, SchemaResult, Ticket
+    flight_descriptor::DescriptorType, flight_service_server::FlightService, Action, ActionType,
+    BasicAuth, Criteria, Empty, FlightData, FlightDescriptor, FlightInfo, HandshakeRequest,
+    HandshakeResponse, PollInfo, PutResult, SchemaAsIpc, SchemaResult, Ticket,
 };
 use datafusion::execution::{context::SessionContext, options::ParquetReadOptions};
 use futures::{stream::BoxStream, StreamExt};
@@ -97,7 +99,7 @@ impl FlightService for FlightServiceImpl {
                 let ctx = SessionContext::new();
                 let mut options = ParquetReadOptions::default();
                 options.file_extension = "tssp";
-                if let Ok(df) = ctx.read_parquet("/Users/firoly/Documents/code/rust/learn_rust/learn_arrow/datafusion/server/test/example.tssp", options).await {
+                if let Ok(df) = ctx.read_parquet(&paths[0], options).await {
                     let schema: Schema = df.schema().into();
 
                     // encode the schema
