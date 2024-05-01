@@ -7,10 +7,7 @@ use arrow::{
     ipc::writer::IpcWriteOptions,
 };
 use arrow_flight::{
-    encode::FlightDataEncoderBuilder,
-    flight_service_server::{FlightService, FlightServiceServer},
-    Action, ActionType, Criteria, Empty, FlightData, FlightDescriptor, FlightInfo,
-    HandshakeRequest, HandshakeResponse, PollInfo, PutResult, SchemaAsIpc, SchemaResult, Ticket,
+    encode::FlightDataEncoderBuilder, flight_service_server::{FlightService, FlightServiceServer}, utils::flight_data_to_batches, Action, ActionType, Criteria, Empty, FlightData, FlightDescriptor, FlightInfo, HandshakeRequest, HandshakeResponse, PollInfo, PutResult, SchemaAsIpc, SchemaResult, Ticket
 };
 use futures::{stream::BoxStream, StreamExt, TryStreamExt};
 use state::State;
@@ -184,7 +181,8 @@ impl FlightService for FlightServiceImpl {
         request: Request<Streaming<FlightData>>,
     ) -> Result<Response<Self::DoPutStream>, Status> {
         let do_put_request: Vec<_> = request.into_inner().try_collect().await?;
-
+        let batch = flight_data_to_batches(&do_put_request);
+        println!("batch: {:?}", batch);
         let mut state = self.state.lock().await;
         state.do_put_request = Some(do_put_request);
 
@@ -192,7 +190,7 @@ impl FlightService for FlightServiceImpl {
             .do_put_response
             .take()
             .ok_or_else(|| Status::internal("No do_put response configured"))?;
-
+        
         let stream = futures::stream::iter(response).map_err(Into::into);
 
         Ok(Response::new(stream.boxed()))

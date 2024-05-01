@@ -10,6 +10,7 @@ use arrow_flight::{
     utils::batches_to_flight_data, FlightClient, FlightData, HandshakeRequest, Ticket,
 };
 
+use client::do_put_test;
 use prost::bytes::{Bytes, BytesMut};
 use prost::Message;
 use serde::Serialize;
@@ -20,7 +21,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let local_url = "http://localhost:50051";
     if let Ok(channel) = Channel::from_static(local_url).connect().await {
         let mut client = FlightClient::new(channel);
-        let resp = test_handshake(&mut client).await;
+        let resp = do_put_test(&mut client).await;
     } else {
         println!("客户端连接失败！");
     }
@@ -67,7 +68,7 @@ struct MyStruct {
     int32: i32,
     string: String,
 }
-fn create_batch() -> Result<Vec<FlightData>, ArrowError> {
+pub fn create_batch() -> Result<Vec<FlightData>, ArrowError> {
     let schema = Schema::new(vec![
         Field::new("int32", DataType::Int32, false),
         Field::new("string", DataType::Utf8, false),

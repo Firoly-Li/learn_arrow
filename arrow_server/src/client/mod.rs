@@ -1,10 +1,10 @@
-use std::io::{self, Write};
-use arrow_flight::FlightClient;
-use clap::Parser;
-use tonic::transport::Channel;
+use self::cli::{get_schema::GetSchema, Executor, SubCmd};
 use crate::client::cli::handshake::Handshake;
 use anyhow::Result;
-use self::cli::{get_schema::GetSchema, Executor, SubCmd};
+use arrow_flight::FlightClient;
+use clap::Parser;
+use std::io::{self, Write};
+use tonic::transport::Channel;
 
 pub mod cli;
 
@@ -55,20 +55,19 @@ async fn run_sub_cli(mut client: FlightClient) {
         if args[0] == "exit" {
             break;
         }
-        
+
         // 执行子命令
-        match parse_subcmd(args[0],input.clone()) {
+        match parse_subcmd(args[0], input.clone()) {
             Ok(sub_cmd) => sub_cmd.execute(&mut client).await,
             Err(e) => println!("{}", e),
         }
     }
 }
 
-
 /**
  * 解析子命令
  */
-fn parse_subcmd(cmd_type: &str, sub_cmd: String) -> Result<SubCmd,String> {
+fn parse_subcmd(cmd_type: &str, sub_cmd: String) -> Result<SubCmd, String> {
     match cmd_type {
         // 对应handshake
         "handshake" => {
@@ -79,9 +78,7 @@ fn parse_subcmd(cmd_type: &str, sub_cmd: String) -> Result<SubCmd,String> {
             }
         }
         // 对应 list_flight
-        "flights" => {
-            Err("".to_string())
-        }
+        "flights" => Err("".to_string()),
         // 对应 get_flight_info、poll_flight_info
         "flight_info" => {
             // get poll 两种方式
@@ -96,26 +93,15 @@ fn parse_subcmd(cmd_type: &str, sub_cmd: String) -> Result<SubCmd,String> {
             }
         }
         // 对应 do_get
-        "get" => {
-            Err("".to_string())
-        }
+        "get" => Err("".to_string()),
         // 对应 do_put
-        "put" => {
-            Err("".to_string())
-        }
+        "put" => Err("".to_string()),
         // 对应 do_action
-        "action" => {
-            Err("".to_string())
-        }
+        "action" => Err("".to_string()),
         // 对应 list_actions
-        "list_actions" => {
-            Err("".to_string())
-        }
+        "list_actions" => Err("".to_string()),
         // 对应 do_exchange
-        "exchange" => {
-            Err("".to_string())
-        }
+        "exchange" => Err("".to_string()),
         _ => Err(format!("未知命令：{}", cmd_type)),
     }
 }
-

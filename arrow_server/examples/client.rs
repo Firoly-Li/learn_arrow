@@ -16,7 +16,6 @@ async fn main() -> Result<()> {
     run_cli().await
 }
 
-
 // /**
 //  * 测试获取数据
 //  */

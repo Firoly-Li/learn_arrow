@@ -20,7 +20,7 @@ pub struct Handshake {
 }
 
 impl Executor for Handshake {
-    async fn execute(&self, client: &mut FlightClient){
+    async fn execute(&self, client: &mut FlightClient) {
         let mut buf = BytesMut::new();
         let auth: BasicAuth = self.into();
         let _ = auth.encode(&mut buf);

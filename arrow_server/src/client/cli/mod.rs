@@ -1,8 +1,8 @@
-pub mod handshake;
 pub mod get_schema;
+pub mod handshake;
+use self::{get_schema::GetSchema, handshake::Handshake};
 use arrow_flight::FlightClient;
 use clap::Parser;
-use self::{get_schema::GetSchema, handshake::Handshake};
 
 #[derive(Debug, Parser)]
 pub enum SubCmd {
@@ -15,7 +15,6 @@ pub enum SubCmd {
 pub trait Executor {
     async fn execute(&self, client: &mut FlightClient);
 }
-
 
 impl Executor for SubCmd {
     async fn execute(&self, client: &mut FlightClient) {

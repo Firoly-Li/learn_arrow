@@ -1,16 +1,46 @@
-use arrow::{datatypes::Schema, ipc::writer::IpcWriteOptions};
-use arrow_flight::{
-    flight_descriptor::DescriptorType, flight_service_server::FlightService, Action, ActionType,
-    BasicAuth, Criteria, Empty, FlightData, FlightDescriptor, FlightInfo, HandshakeRequest,
-    HandshakeResponse, PollInfo, PutResult, SchemaAsIpc, SchemaResult, Ticket,
+use std::{
+    borrow::{Borrow, BorrowMut},
+    fs::File,
+    sync::Arc,
 };
-use datafusion::execution::{context::SessionContext, options::ParquetReadOptions};
-use futures::{stream::BoxStream, StreamExt};
+
+use arrow::{array::RecordBatch, datatypes::Schema, ipc::writer::IpcWriteOptions};
+use arrow_flight::{
+    flight_descriptor::DescriptorType,
+    flight_service_server::FlightService,
+    utils::{flight_data_to_arrow_batch, flight_data_to_batches},
+    Action, ActionType, BasicAuth, Criteria, Empty, FlightData, FlightDescriptor, FlightInfo,
+    HandshakeRequest, HandshakeResponse, PollInfo, PutResult, SchemaAsIpc, SchemaResult, Ticket,
+};
+use datafusion::{
+    execution::{context::SessionContext, options::ParquetReadOptions},
+    logical_expr::{tree_node::plan, LogicalPlanBuilder},
+    physical_plan::stream,
+};
+use futures::{stream::BoxStream, StreamExt, TryStreamExt};
+use parquet::{arrow::ArrowWriter, basic::Compression, file::properties::WriterProperties};
 use prost::{bytes::Bytes, Message};
 use tonic::{Request, Response, Status, Streaming};
 
 #[derive(Debug, Default, Clone)]
 pub struct FlightServiceImpl {}
+
+impl FlightServiceImpl {
+    fn write_parquet(&self, batches: Vec<RecordBatch>) {
+        let schema = batches.first().unwrap().schema();
+        let path = "";
+        // 写入 Parquet 文件
+        let file = File::create(path).unwrap();
+        let props = WriterProperties::builder()
+            .set_compression(Compression::SNAPPY)
+            .build();
+        let mut writer = ArrowWriter::try_new(file, schema.into(), Some(props)).unwrap();
+        for batch in batches {
+            writer.write(&batch).unwrap();
+        }
+        writer.close().unwrap();
+    }
+}
 
 /**
  *
@@ -120,6 +150,14 @@ impl FlightService for FlightServiceImpl {
      * 客户端根据 FlightInfo 发送 DoGet 请求以获取数据。服务端以流的形式返回数据，
      * 每个数据包通常是 Arrow 格式的 RecordBatch。
      * 客户端可以逐步接收和处理这些数据包，无需一次性加载全部数据。
+     * 
+     * Ticket：
+     * Ticket是一个用于请求数据的凭据或者说是标识。当客户端想要从Flight服务器获取数据时，
+     * 它会发送一个包含Ticket的请求给服务器。这个Ticket实质上包含了服务器所需的所有信息
+     * 以便准确地定位和检索请求的数据集。
+     * 具体来说，Ticket可以包含例如表名、查询ID、数据过滤条件或者其他任何必要的元数据，
+     * 这些都是为了能够让服务器识别并处理这个请求，从而返回相应的数据给客户端。
+     * 在Flight的协议层面，Ticket是一个二进制序列化的对象，其具体内容和格式取决于实现和使用的上下文。
      */
     async fn do_get(
         &self,
@@ -135,12 +173,18 @@ impl FlightService for FlightServiceImpl {
      */
     async fn do_put(
         &self,
-        _request: Request<Streaming<FlightData>>,
+        request: Request<Streaming<FlightData>>,
     ) -> Result<Response<Self::DoPutStream>, Status> {
-        Err(Status::ok("message"))
+        let stream: Vec<_> = request.into_inner().collect().await;
+        // 从第一个FlightData消息中尝试提取schema
+        let ss = stream.into_iter().filter_map(|fd|fd.ok()).collect::<Vec<FlightData>>();
+        let batches = flight_data_to_batches(ss.borrow()).unwrap();
+        // 这里需要把RecordBatch存储起来，以便于后续使用
+        Err(Status::ok("put success!"))
     }
 
     /**
+     * 用于扩展arrowFlight机制，可以自定义Action
      * 客户端可以发送一个包含特定操作请求的消息（如执行 SQL 查询、触发数据处理任务等）。
      * 服务端执行相应操作，并返回操作结果或状态信息。
      * 此机制扩展了 Arrow Flight 的功能，使其不仅局限于数据传输，还能支持复杂的业务逻辑
