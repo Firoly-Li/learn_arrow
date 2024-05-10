@@ -21,7 +21,7 @@ mod tests {
     use parquet::{
         arrow::{
             arrow_reader::{ParquetRecordBatchReader, ParquetRecordBatchReaderBuilder},
-            ArrowWriter,
+            ArrowWriter, AsyncArrowWriter,
         },
         basic::Compression,
         file::properties::WriterProperties,
@@ -155,6 +155,20 @@ mod tests {
             Field::new("age", DataType::Int32, false),
             Field::new("address", DataType::Int32, false),
         ])
+    }
+
+    #[tokio::test]
+    async fn async_write_test() {
+        let batch1 = create_batch1();
+        let file = tokio::fs::File::create("test/111.tssp").await.unwrap();
+        let props = WriterProperties::builder()
+            .set_compression(Compression::SNAPPY)
+            .build();
+        let mut writer = AsyncArrowWriter::try_new(file, batch1.schema().clone(), Some(props)).unwrap();
+        for i in 0..100 {
+            writer.write(&create_batch(i)).await.unwrap();
+        }
+        writer.close().await.unwrap();
     }
 
     /**

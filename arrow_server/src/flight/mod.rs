@@ -1,31 +1,30 @@
-use std::{
-    borrow::{Borrow, BorrowMut},
-    fs::File,
-    sync::Arc,
-};
+mod do_put;
+mod get_schema;
 
-use arrow::{array::RecordBatch, datatypes::Schema, ipc::writer::IpcWriteOptions};
+use std::{borrow::Borrow, fs::File};
+
+use arrow::array::RecordBatch;
 use arrow_flight::{
-    flight_descriptor::DescriptorType,
-    flight_service_server::FlightService,
-    utils::{flight_data_to_arrow_batch, flight_data_to_batches},
-    Action, ActionType, BasicAuth, Criteria, Empty, FlightData, FlightDescriptor, FlightInfo,
-    HandshakeRequest, HandshakeResponse, PollInfo, PutResult, SchemaAsIpc, SchemaResult, Ticket,
-};
-use datafusion::{
-    execution::{context::SessionContext, options::ParquetReadOptions},
-    logical_expr::{tree_node::plan, LogicalPlanBuilder},
-    physical_plan::stream,
+    flight_descriptor::DescriptorType, flight_service_server::FlightService,
+    utils::flight_data_to_batches, Action, ActionType, BasicAuth, Criteria, Empty, FlightData,
+    FlightDescriptor, FlightInfo, HandshakeRequest, HandshakeResponse, PollInfo, PutResult,
+    SchemaResult, Ticket,
 };
 use futures::{stream::BoxStream, StreamExt, TryStreamExt};
 use parquet::{arrow::ArrowWriter, basic::Compression, file::properties::WriterProperties};
 use prost::{bytes::Bytes, Message};
 use tonic::{Request, Response, Status, Streaming};
 
+use self::{
+    do_put::write_batch,
+    get_schema::{get_schema_by_cmd, get_schema_by_path},
+};
+
 #[derive(Debug, Default, Clone)]
 pub struct FlightServiceImpl {}
 
 impl FlightServiceImpl {
+    #[warn(dead_code)]
     fn write_parquet(&self, batches: Vec<RecordBatch>) {
         let schema = batches.first().unwrap().schema();
         let path = "";
@@ -91,25 +90,42 @@ impl FlightService for FlightServiceImpl {
         &self,
         _request: Request<Criteria>,
     ) -> Result<Response<Self::ListFlightsStream>, Status> {
-        Err(Status::ok("message"))
+        unimplemented!()
     }
 
     /**
      * 客户端请求特定数据集的详细信息，服务端返回 FlightInfo，
      * 其中包含数据集的完整 Schema、数据分布情况（如有多个分片）、访问凭证（如有）等
+     *
+     * FlightInfo 是 Apache Arrow Flight 协议中的一个核心数据结构，它用来描述一个可执行的查询或数据传输任务的信息，包含客户端需要知道的所有元数据以发起和处理一次数据交换。下面是 FlightInfo 结构体中一些关键字段及其作用：
+     * Schema: 定义了数据的结构，包括列名、数据类型等，让客户端知道即将接收的数据格式。
+     * FlightDescriptor: 描述了这次Flight的唯一标识符和类型，可以是命令描述符、路径描述符或命令字符串，帮助客户端和服务器识别特定的查询或数据集。
+     * Endpoints: 包含了可以用来获取数据的一个或多个服务端点信息（IP地址、端口等），客户端可以根据这些信息建立连接以获取数据。这对于高可用性和负载均衡非常重要。
+     * TotalBytes: 表示整个数据传输预计的总字节数，这个字段在某些场景下可能不可用或不准确，但它可以用来做预估的资源规划或进度显示。
+     * TotalRecords: 表示数据集中预计的记录总数，类似于 TotalBytes，提供数据规模的粗略估计。
+     * DescriptorType: 指示 FlightDescriptor 的类型，比如是命令还是路径，这影响了如何解析和理解 FlightDescriptor 的内容。
+     * Options: 可选参数集合，可能包含特定于实现或特定于查询的额外元数据，用于定制化数据处理或传输过程。
+     * Expiration: 表示 FlightInfo 的有效期限，过了这个时间点，客户端可能需要重新请求 FlightInfo。
      */
     async fn get_flight_info(
         &self,
-        _request: Request<FlightDescriptor>,
+        request: Request<FlightDescriptor>,
     ) -> Result<Response<FlightInfo>, Status> {
-        Err(Status::ok("message"))
+        let desc = request.into_inner();
+        let desc_type = desc.r#type();
+        match desc_type {
+            DescriptorType::Unknown => todo!(),
+            DescriptorType::Path => todo!(),
+            DescriptorType::Cmd => todo!(),
+        }
+        unimplemented!()
     }
 
     async fn poll_flight_info(
         &self,
         _request: Request<FlightDescriptor>,
     ) -> Result<Response<PollInfo>, Status> {
-        Err(Status::ok("message"))
+        unimplemented!()
     }
 
     /**
@@ -122,27 +138,9 @@ impl FlightService for FlightServiceImpl {
         let request = request.into_inner();
         let desc_type = request.r#type();
         match desc_type {
-            DescriptorType::Unknown => Err(Status::ok("message")),
-            DescriptorType::Path => {
-                let paths = request.path;
-                // path 可以是tssp文件的路径，可以通过Parquet读取指定tssp文件获取schema信息
-                let ctx = SessionContext::new();
-                let mut options = ParquetReadOptions::default();
-                options.file_extension = "tssp";
-                if let Ok(df) = ctx.read_parquet(&paths[0], options).await {
-                    let schema: Schema = df.schema().into();
-
-                    // encode the schema
-                    let options = IpcWriteOptions::default();
-                    let response: SchemaResult = SchemaAsIpc::new(&schema, &options)
-                        .try_into()
-                        .expect("Error encoding schema");
-                    Ok(Response::new(response))
-                } else {
-                    Err(Status::ok("message"))
-                }
-            }
-            DescriptorType::Cmd => Err(Status::ok("message")),
+            DescriptorType::Unknown => Err(Status::ok("FlightDescriptor type is unknown")),
+            DescriptorType::Path => get_schema_by_path(request.path).await,
+            DescriptorType::Cmd => get_schema_by_cmd(request.cmd).await,
         }
     }
 
@@ -150,7 +148,7 @@ impl FlightService for FlightServiceImpl {
      * 客户端根据 FlightInfo 发送 DoGet 请求以获取数据。服务端以流的形式返回数据，
      * 每个数据包通常是 Arrow 格式的 RecordBatch。
      * 客户端可以逐步接收和处理这些数据包，无需一次性加载全部数据。
-     * 
+     *
      * Ticket：
      * Ticket是一个用于请求数据的凭据或者说是标识。当客户端想要从Flight服务器获取数据时，
      * 它会发送一个包含Ticket的请求给服务器。这个Ticket实质上包含了服务器所需的所有信息
@@ -159,11 +157,13 @@ impl FlightService for FlightServiceImpl {
      * 这些都是为了能够让服务器识别并处理这个请求，从而返回相应的数据给客户端。
      * 在Flight的协议层面，Ticket是一个二进制序列化的对象，其具体内容和格式取决于实现和使用的上下文。
      */
+
     async fn do_get(
         &self,
-        _request: Request<Ticket>,
+        request: Request<Ticket>,
     ) -> Result<Response<Self::DoGetStream>, Status> {
-        Err(Status::ok("message"))
+        let inner = request.into_inner();
+        unimplemented!()
     }
 
     /**
@@ -177,10 +177,15 @@ impl FlightService for FlightServiceImpl {
     ) -> Result<Response<Self::DoPutStream>, Status> {
         let stream: Vec<_> = request.into_inner().collect().await;
         // 从第一个FlightData消息中尝试提取schema
-        let ss = stream.into_iter().filter_map(|fd|fd.ok()).collect::<Vec<FlightData>>();
-        let batches = flight_data_to_batches(ss.borrow()).unwrap();
+        let ss = stream
+            .into_iter()
+            .filter_map(|fd| fd.ok())
+            .collect::<Vec<FlightData>>();
+        let batches = flight_data_to_batches(&ss).unwrap();
         // 这里需要把RecordBatch存储起来，以便于后续使用
-        Err(Status::ok("put success!"))
+        let write_result = write_batch(batches).await;
+        let stream = futures::stream::iter(write_result).map_err(Into::into);
+        Ok(Response::new(stream.boxed()))
     }
 
     /**
@@ -193,14 +198,14 @@ impl FlightService for FlightServiceImpl {
         &self,
         _request: Request<Action>,
     ) -> Result<Response<Self::DoActionStream>, Status> {
-        Err(Status::ok("message"))
+        unimplemented!()
     }
 
     async fn list_actions(
         &self,
         _request: Request<Empty>,
     ) -> Result<Response<Self::ListActionsStream>, Status> {
-        Err(Status::ok("message"))
+        unimplemented!()
     }
 
     /**
@@ -212,6 +217,6 @@ impl FlightService for FlightServiceImpl {
         &self,
         _request: Request<Streaming<FlightData>>,
     ) -> Result<Response<Self::DoExchangeStream>, Status> {
-        Err(Status::ok("message"))
+        unimplemented!()
     }
 }

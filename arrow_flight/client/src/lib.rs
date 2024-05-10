@@ -1,10 +1,14 @@
 use std::sync::Arc;
 
-use arrow::{datatypes::{DataType, Field, Schema}, error::ArrowError, json::ReaderBuilder};
+use arrow::{
+    datatypes::{DataType, Field, Schema},
+    error::ArrowError,
+    json::ReaderBuilder,
+};
 use arrow_flight::{utils::batches_to_flight_data, FlightClient, FlightData};
 
-use serde::Serialize;
 use anyhow::Result;
+use serde::Serialize;
 use tokio_stream::StreamExt;
 
 pub async fn do_put_test(cleint: &mut FlightClient) {
@@ -13,14 +17,11 @@ pub async fn do_put_test(cleint: &mut FlightClient) {
         Ok(b) => {
             // 创建一个流，用于发送数据到服务端
             let input_stream = futures::stream::iter(b).map(Ok);
-            let _ = cleint.do_put(input_stream).await;
+            let a = cleint.do_put(input_stream).await.unwrap();
         }
         Err(_) => todo!(),
     }
 }
-
-
-
 
 #[derive(Serialize)]
 struct MyStruct {
@@ -34,8 +35,7 @@ pub fn create_batch() -> Result<Vec<FlightData>, ArrowError> {
     ]);
 
     let mut vecs = Vec::new();
-    for _ in 0..5  {
-        
+    for _ in 0..5 {
         let rows = vec![
             MyStruct {
                 int32: 5,
@@ -46,14 +46,14 @@ pub fn create_batch() -> Result<Vec<FlightData>, ArrowError> {
                 string: "foo".to_string(),
             },
         ];
-    
+
         let mut decoder = ReaderBuilder::new(Arc::new(schema.clone()))
             .build_decoder()
             .unwrap();
         decoder.serialize(&rows).unwrap();
-    
+
         let batch: arrow::array::RecordBatch = decoder.flush().unwrap().unwrap();
-            vecs.push(batch);
+        vecs.push(batch);
     }
     println!("vecs = {:?}", vecs.len());
     batches_to_flight_data(&schema, vecs)
