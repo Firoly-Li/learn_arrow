@@ -1,5 +1,7 @@
 pub mod get_schema;
 pub mod handshake;
+mod put;
+
 use self::{get_schema::GetSchema, handshake::Handshake};
 use arrow_flight::FlightClient;
 use clap::Parser;

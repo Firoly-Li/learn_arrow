@@ -14,10 +14,10 @@ async fn main() {
     let table = create_memory_table();
     let table = Arc::new(table);
     let context = SessionContext::new();
-    sql_select_test(table.clone(), &context).await;
+    // sql_select_test(table.clone(), &context).await;
     // api_select_test(table.clone(), &context).await;
 
-    // select_test(&context).await;
+    select_test(&context).await;
 }
 
 /**
@@ -39,13 +39,13 @@ async fn api_select_test(table: Arc<MemTable>, context: &SessionContext) {
  * 查询Parquet文件中的指定列的所有数据
  */
 async fn select_test(ctx: &SessionContext) {
-    let table_paths = "test/example.tssp";
+    let table_paths = "test/0.tssp";
     let mut options = ParquetReadOptions::default();
     options.file_extension = "tssp";
     if let Ok(df) = ctx.read_parquet(table_paths, options).await {
         // let expr = col("name").eq(lit(Int32(Some(1))));
         let resp = df
-            .select_columns(&["name"])
+            .select_columns(&["*"])
             .unwrap()
             .collect()
             .await

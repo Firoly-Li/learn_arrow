@@ -113,6 +113,7 @@ impl FlightService for FlightServiceImpl {
     ) -> Result<Response<FlightInfo>, Status> {
         let desc = request.into_inner();
         let desc_type = desc.r#type();
+        println!("desc_type: {:?}",desc_type);
         match desc_type {
             DescriptorType::Unknown => todo!(),
             DescriptorType::Path => todo!(),
@@ -163,7 +164,7 @@ impl FlightService for FlightServiceImpl {
         request: Request<Ticket>,
     ) -> Result<Response<Self::DoGetStream>, Status> {
         let inner = request.into_inner();
-        unimplemented!()
+        unimplemented!()        
     }
 
     /**
@@ -182,6 +183,7 @@ impl FlightService for FlightServiceImpl {
             .filter_map(|fd| fd.ok())
             .collect::<Vec<FlightData>>();
         let batches = flight_data_to_batches(&ss).unwrap();
+        println!("batches: {:?}", batches);
         // 这里需要把RecordBatch存储起来，以便于后续使用
         let write_result = write_batch(batches).await;
         let stream = futures::stream::iter(write_result).map_err(Into::into);

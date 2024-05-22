@@ -62,6 +62,9 @@ impl FlightService for FlightServiceImpl {
     type ListActionsStream = BoxStream<'static, Result<ActionType, Status>>;
     type DoExchangeStream = BoxStream<'static, Result<FlightData, Status>>;
 
+    /**
+     * 客户端向服务端发送 HandshakeRequest，服务端响应 HandshakeResponse。
+     */
     async fn handshake(
         &self,
         request: Request<Streaming<HandshakeRequest>>,
@@ -83,6 +86,7 @@ impl FlightService for FlightServiceImpl {
     /**
      * 客户端可以向服务端发送 ListFlights 请求，服务端响应包含可用数据集或服务列表的 FlightInfo 对象。
      * 这些信息通常包括数据集的描述、Schema、分区信息等，帮助客户端了解可访问的数据资源。
+     * TODO
      */
     async fn list_flights(
         &self,
@@ -97,6 +101,7 @@ impl FlightService for FlightServiceImpl {
     /**
      * 客户端请求特定数据集的详细信息，服务端返回 FlightInfo，
      * 其中包含数据集的完整 Schema、数据分布情况（如有多个分片）、访问凭证（如有）等
+     * TODO
      */
     async fn get_flight_info(
         &self,
@@ -113,6 +118,9 @@ impl FlightService for FlightServiceImpl {
         Ok(Response::new(response))
     }
 
+    /**
+     * TODO
+     */
     async fn poll_flight_info(
         &self,
         request: Request<FlightDescriptor>,

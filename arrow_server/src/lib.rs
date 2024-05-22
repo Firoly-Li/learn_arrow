@@ -20,7 +20,7 @@ pub mod web;
  */
 pub async fn flight_server() -> Result<()> {
     let test_flight_server = FlightServiceImpl::default();
-    let addr = "[::1]:50051".parse()?;
+    let addr = "192.168.43.83:50051".parse()?;
     let server = FlightServiceServer::new(test_flight_server);
     println!("flight server will be starting on :{}", addr);
     Server::builder().add_service(server).serve(addr).await?;

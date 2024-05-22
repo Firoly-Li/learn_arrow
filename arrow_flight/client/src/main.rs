@@ -7,7 +7,7 @@ use arrow::{
 };
 
 use arrow_flight::{
-    utils::batches_to_flight_data, FlightClient, FlightData, HandshakeRequest, Ticket,
+    utils::batches_to_flight_data, FlightClient, FlightData, FlightDescriptor, HandshakeRequest, Ticket
 };
 
 use client::do_put_test;
@@ -21,7 +21,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let local_url = "http://localhost:50051";
     if let Ok(channel) = Channel::from_static(local_url).connect().await {
         let mut client = FlightClient::new(channel);
-        let resp = do_put_test(&mut client).await;
+        let resp = test_get_schema(&mut client).await;
     } else {
         println!("客户端连接失败！");
     }
@@ -49,12 +49,18 @@ async fn test_handshake(client: &mut FlightClient) {
     }
 }
 
+async fn test_get_schema(client: &mut FlightClient) {
+    let desc = FlightDescriptor::new_cmd("0.tssp".as_bytes());
+    let response = client.get_schema(desc).await;
+    println!("服务端返回的消息： {:?}", response);
+}
+
 /**
  * 测试获取数据
  */
 async fn test_do_get(client: &mut FlightClient) {
     let ticket = Ticket {
-        ticket: Bytes::from_static("bytes".as_bytes()),
+        ticket: Bytes::from_static("0".as_bytes()),
     };
     let resp = client
         .do_get(ticket)
