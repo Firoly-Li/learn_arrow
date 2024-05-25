@@ -73,7 +73,7 @@ async fn test_do_get(client: &mut FlightClient) {
         let r = resp.next().await;
         if let Some(batch) = r {
             println!("batch: {:?}", batch);
-        }else {
+        } else {
             break;
         }
     }

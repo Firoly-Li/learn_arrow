@@ -17,7 +17,9 @@ use std::fs::File;
 use tonic::{Request, Response, Status, Streaming};
 
 use self::{
-    do_get::parse_file_path, do_put::write_batch, get_schema::{get_schema_by_cmd, get_schema_by_path}
+    do_get::parse_file_path,
+    do_put::write_batch,
+    get_schema::{get_schema_by_cmd, get_schema_by_path},
 };
 
 #[derive(Debug, Default, Clone)]
@@ -185,18 +187,18 @@ impl FlightService for FlightServiceImpl {
                 let mut options = ParquetReadOptions::default();
                 options.file_extension = "tssp";
                 if let Ok(df) = ctx.read_parquet(fie_path, options).await {
-                    println!("df: {:?}",df);
+                    println!("df: {:?}", df);
                     // 执行查询并收集结果
                     let resp = df.collect().await.unwrap();
 
                     // 将查询结果转换为 Vec<RecordBatch>
                     // let record_batches: Vec<RecordBatch> = results.into_iter().collect();
                     // let resp = df.select_columns(&["*"]).unwrap().collect().await.unwrap();
-                    println!("resp: {:?}",resp);
+                    println!("resp: {:?}", resp);
                     let batchs: Vec<Result<RecordBatch, FlightError>> =
                         resp.iter().map(|x| Ok(x.clone())).collect();
                     let batch_stream = futures::stream::iter(batchs).map_err(Into::into);
-    
+
                     let stream = FlightDataEncoderBuilder::new()
                         .build(batch_stream)
                         .map_err(Into::into);
@@ -207,7 +209,7 @@ impl FlightService for FlightServiceImpl {
                 } else {
                     Err(Status::new(tonic::Code::NotFound, "message"))
                 }
-            },
+            }
             Err(_e) => Err(Status::new(tonic::Code::NotFound, "message")),
         };
 

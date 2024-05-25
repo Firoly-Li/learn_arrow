@@ -1,13 +1,11 @@
 use anyhow::Result;
 use arrow_flight::Ticket;
 
-
-
 pub(crate) fn parse_file_path(ticket: Ticket) -> Result<String> {
     let path =
-    "/Users/firoly/Documents/code/rust/learn_rust/learn_arrow/datafusion/server/test/0.tssp";
+        "/Users/firoly/Documents/code/rust/learn_rust/learn_arrow/datafusion/server/test/0.tssp";
     Ok(path.to_string())
-   
+
     // return match String::from_utf8(ticket.ticket.to_vec()) {
     //     Ok(p) => {
     //         let path =

@@ -14,6 +14,7 @@ pub mod error;
 pub mod flight;
 pub mod parquet;
 pub mod web;
+pub mod memdb;
 
 /**
  * 启动flight_server
@@ -31,5 +32,12 @@ pub fn now() -> usize {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .unwrap()
-        .as_millis() as usize
+        .as_micros() as usize
+}
+
+pub fn now_as_nano() -> usize {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .as_nanos() as usize
 }
