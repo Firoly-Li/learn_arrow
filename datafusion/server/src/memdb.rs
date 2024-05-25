@@ -164,7 +164,8 @@ mod tests {
         let props = WriterProperties::builder()
             .set_compression(Compression::SNAPPY)
             .build();
-        let mut writer = AsyncArrowWriter::try_new(file, batch1.schema().clone(), Some(props)).unwrap();
+        let mut writer =
+            AsyncArrowWriter::try_new(file, batch1.schema().clone(), Some(props)).unwrap();
         for i in 0..100 {
             writer.write(&create_batch(i)).await.unwrap();
         }

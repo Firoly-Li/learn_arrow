@@ -9,7 +9,6 @@ use tracing::info;
 
 use super::Append;
 
-
 pub struct ActiveFile {
     file_name: String,
     // 数据写入
@@ -22,26 +21,33 @@ pub struct ActiveFile {
 
 impl Debug for ActiveFile {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("ActiveFile").field("file_name", &self.file_name).field("max_size", &self.max_size).finish()
+        f.debug_struct("ActiveFile")
+            .field("file_name", &self.file_name)
+            .field("max_size", &self.max_size)
+            .finish()
     }
 }
 
 impl ActiveFile {
-    pub async fn init(max_size: usize, path: &str,schema: Schema) -> Result<Self> {
+    pub async fn init(max_size: usize, path: &str, schema: Schema) -> Result<Self> {
         let times = now();
         let file_path = path.to_owned() + times.to_string().as_str() + ".tssp";
         info!("path = {:?}", file_path);
-    
+
         if let Ok(_file) = File::create(file_path.clone()).await {
             info!("open active file success");
-            let file = OpenOptions::new().append(true).read(true).open(file_path).await.unwrap();
+            let file = OpenOptions::new()
+                .append(true)
+                .read(true)
+                .open(file_path)
+                .await
+                .unwrap();
             let props = WriterProperties::builder()
-            .set_compression(Compression::SNAPPY)
-            .build();
-           Ok(Self {
+                .set_compression(Compression::SNAPPY)
+                .build();
+            Ok(Self {
                 file_name: times.to_string(),
-                writer: AsyncArrowWriter::try_new(file, 
-                    Arc::new(schema), Some(props)).unwrap(),
+                writer: AsyncArrowWriter::try_new(file, Arc::new(schema), Some(props)).unwrap(),
                 max_size,
                 file_path: path.to_string(),
             })
@@ -49,7 +55,7 @@ impl ActiveFile {
             Err(ArrowError::CreateActiveFileError.into())
         }
     }
-    
+
     /**
      * 是否可写
      * TODO 未实现

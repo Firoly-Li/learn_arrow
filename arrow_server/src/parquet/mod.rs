@@ -54,10 +54,11 @@ pub struct ParquetService {
 }
 
 impl ParquetService {
-    async fn init_active_file(&mut self,schema: Schema) {
-        
+    async fn init_active_file(&mut self, schema: Schema) {
         info!("init active file");
-        let active = ActiveFile::init(self.conf.max_file_size, self.conf.path,schema).await.unwrap();
+        let active = ActiveFile::init(self.conf.max_file_size, self.conf.path, schema)
+            .await
+            .unwrap();
         self.active_file = Some(active);
     }
 
@@ -67,7 +68,11 @@ impl ParquetService {
 
     async fn update_active_file(mut self) {
         self.active_file.unwrap().close_writer().await;
-        self.active_file = Some(ActiveFile::init(self.conf.max_file_size, self.conf.path,create_schema()).await.unwrap());
+        self.active_file = Some(
+            ActiveFile::init(self.conf.max_file_size, self.conf.path, create_schema())
+                .await
+                .unwrap(),
+        );
     }
 }
 
@@ -104,13 +109,11 @@ impl ParquetService {
     }
 }
 
-
 impl Append for ParquetService {
     type Resp = Result<()>;
-    
+
     async fn append(&mut self, buf: &RecordBatch) -> Self::Resp {
         info!("ParquetService Append");
         self.active_file.as_mut().unwrap().append(buf).await
     }
-    
 }

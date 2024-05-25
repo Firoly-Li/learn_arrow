@@ -7,10 +7,12 @@ use arrow::{
 };
 
 use arrow_flight::{
-    utils::batches_to_flight_data, FlightClient, FlightData, FlightDescriptor, HandshakeRequest, Ticket
+    utils::batches_to_flight_data, FlightClient, FlightData, FlightDescriptor, HandshakeRequest,
+    Ticket,
 };
 
 use client::do_put_test;
+use futures::StreamExt;
 use prost::bytes::{Bytes, BytesMut};
 use prost::Message;
 use serde::Serialize;
@@ -18,10 +20,10 @@ use tonic::transport::Channel;
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let remote_url = "http://192.168.3.223:50051";
-    let local_url = "http://localhost:50051";
+    let local_url = "http://127.0.0.1:50051";
     if let Ok(channel) = Channel::from_static(local_url).connect().await {
         let mut client = FlightClient::new(channel);
-        let resp = test_get_schema(&mut client).await;
+        let resp = test_do_get(&mut client).await;
     } else {
         println!("客户端连接失败！");
     }
@@ -62,11 +64,19 @@ async fn test_do_get(client: &mut FlightClient) {
     let ticket = Ticket {
         ticket: Bytes::from_static("0".as_bytes()),
     };
-    let resp = client
+    let mut resp = client
         .do_get(ticket)
         .await
         .expect("--------------------------------------------------");
     println!("resp: {:?}", resp);
+    loop {
+        let r = resp.next().await;
+        if let Some(batch) = r {
+            println!("batch: {:?}", batch);
+        }else {
+            break;
+        }
+    }
 }
 
 #[derive(Serialize)]

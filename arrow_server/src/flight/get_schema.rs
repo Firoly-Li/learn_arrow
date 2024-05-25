@@ -1,7 +1,13 @@
 use arrow::{datatypes::Schema, ipc::writer::IpcWriteOptions};
 use arrow_flight::{SchemaAsIpc, SchemaResult};
-use datafusion::{common::DFSchema, execution::{context::SessionContext, options::ParquetReadOptions}};
-use prost::{bytes::{Bytes, BytesMut}, Message};
+use datafusion::{
+    common::DFSchema,
+    execution::{context::SessionContext, options::ParquetReadOptions},
+};
+use prost::{
+    bytes::{Bytes, BytesMut},
+    Message,
+};
 use tonic::{Response, Status};
 
 /**
@@ -28,20 +34,12 @@ pub async fn get_schema_by_path(paths: Vec<String>) -> Result<Response<SchemaRes
 
 /**
  * 根据cmd获取schema
+ * todo cmd格式：标准sql
+ * 根据CMD查询具体
  */
 pub async fn get_schema_by_cmd(cmd: Bytes) -> Result<Response<SchemaResult>, Status> {
-    let file_name = String::from_utf8_lossy(&cmd.to_vec()).into_owned();
-    let path = "/Users/firoly/Documents/code/rust/learn_rust/learn_arrow/datafusion/server/test/".to_string();
-    let file_path = path + file_name.as_str();
     let ctx = SessionContext::new();
-    let mut options = ParquetReadOptions::default();
-    options.file_extension = "tssp";
-    let df = ctx.read_parquet(file_path, options).await.unwrap();
-    let schema: Schema = df.schema().into();
-    println!("schema: {:?}", schema);
-    let options = IpcWriteOptions::default();
-    let response: SchemaResult = SchemaAsIpc::new(&schema, &options)
-        .try_into()
-        .expect("Error encoding schema");
-    Ok(Response::new(response))
+    let sql = String::from_utf8(cmd.to_vec()).unwrap();
+    let resp = ctx.sql(&sql).await;
+    Ok(Response::new(SchemaResult::default()))
 }

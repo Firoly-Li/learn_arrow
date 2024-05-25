@@ -1,23 +1,23 @@
+mod do_get;
 mod do_put;
 mod get_schema;
 
-use std::{borrow::Borrow, fs::File};
-
 use arrow::array::RecordBatch;
 use arrow_flight::{
-    flight_descriptor::DescriptorType, flight_service_server::FlightService,
-    utils::flight_data_to_batches, Action, ActionType, BasicAuth, Criteria, Empty, FlightData,
-    FlightDescriptor, FlightInfo, HandshakeRequest, HandshakeResponse, PollInfo, PutResult,
-    SchemaResult, Ticket,
+    encode::FlightDataEncoderBuilder, error::FlightError, flight_descriptor::DescriptorType,
+    flight_service_server::FlightService, utils::flight_data_to_batches, Action, ActionType,
+    BasicAuth, Criteria, Empty, FlightData, FlightDescriptor, FlightEndpoint, FlightInfo,
+    HandshakeRequest, HandshakeResponse, PollInfo, PutResult, SchemaResult, Ticket,
 };
+use datafusion::execution::{context::SessionContext, options::ParquetReadOptions};
 use futures::{stream::BoxStream, StreamExt, TryStreamExt};
 use parquet::{arrow::ArrowWriter, basic::Compression, file::properties::WriterProperties};
 use prost::{bytes::Bytes, Message};
+use std::fs::File;
 use tonic::{Request, Response, Status, Streaming};
 
 use self::{
-    do_put::write_batch,
-    get_schema::{get_schema_by_cmd, get_schema_by_path},
+    do_get::parse_file_path, do_put::write_batch, get_schema::{get_schema_by_cmd, get_schema_by_path}
 };
 
 #[derive(Debug, Default, Clone)]
@@ -113,13 +113,27 @@ impl FlightService for FlightServiceImpl {
     ) -> Result<Response<FlightInfo>, Status> {
         let desc = request.into_inner();
         let desc_type = desc.r#type();
-        println!("desc_type: {:?}",desc_type);
-        match desc_type {
-            DescriptorType::Unknown => todo!(),
-            DescriptorType::Path => todo!(),
-            DescriptorType::Cmd => todo!(),
-        }
-        unimplemented!()
+        println!("desc_type: {:?}", desc_type);
+        return match desc_type {
+            DescriptorType::Unknown => Err(Status::new(tonic::Code::Unknown, "message")),
+            DescriptorType::Path => {
+                let paths = desc.path;
+                let ticket_data = paths[0].as_bytes().to_vec();
+                let ticket = Ticket::new(ticket_data);
+                let endpoint = FlightEndpoint {
+                    ticket: Some(ticket),
+                    ..Default::default()
+                };
+                let flight_info = FlightInfo {
+                    endpoint: vec![endpoint],
+                    ..Default::default()
+                };
+                Ok(Response::new(flight_info))
+            }
+            DescriptorType::Cmd => {
+                Err(Status::new(tonic::Code::Unknown, "not support cmd message"))
+            }
+        };
     }
 
     async fn poll_flight_info(
@@ -158,13 +172,46 @@ impl FlightService for FlightServiceImpl {
      * 这些都是为了能够让服务器识别并处理这个请求，从而返回相应的数据给客户端。
      * 在Flight的协议层面，Ticket是一个二进制序列化的对象，其具体内容和格式取决于实现和使用的上下文。
      */
-
     async fn do_get(
         &self,
         request: Request<Ticket>,
     ) -> Result<Response<Self::DoGetStream>, Status> {
+        println!("do_get is point");
         let inner = request.into_inner();
-        unimplemented!()        
+        // let ticket: Bytes = inner.ticket;
+        return match parse_file_path(inner) {
+            Ok(fie_path) => {
+                let ctx = SessionContext::new();
+                let mut options = ParquetReadOptions::default();
+                options.file_extension = "tssp";
+                if let Ok(df) = ctx.read_parquet(fie_path, options).await {
+                    println!("df: {:?}",df);
+                    // 执行查询并收集结果
+                    let resp = df.collect().await.unwrap();
+
+                    // 将查询结果转换为 Vec<RecordBatch>
+                    // let record_batches: Vec<RecordBatch> = results.into_iter().collect();
+                    // let resp = df.select_columns(&["*"]).unwrap().collect().await.unwrap();
+                    println!("resp: {:?}",resp);
+                    let batchs: Vec<Result<RecordBatch, FlightError>> =
+                        resp.iter().map(|x| Ok(x.clone())).collect();
+                    let batch_stream = futures::stream::iter(batchs).map_err(Into::into);
+    
+                    let stream = FlightDataEncoderBuilder::new()
+                        .build(batch_stream)
+                        .map_err(Into::into);
+                    let mut resp = Response::new(stream.boxed());
+                    resp.metadata_mut()
+                        .insert("test-resp-header", "some_val".parse().unwrap());
+                    Ok(resp)
+                } else {
+                    Err(Status::new(tonic::Code::NotFound, "message"))
+                }
+            },
+            Err(_e) => Err(Status::new(tonic::Code::NotFound, "message")),
+        };
+
+        // unimplemented!()
     }
 
     /**
