@@ -1,34 +1,26 @@
-use std::{collections::BTreeMap, sync::Arc};
-
 use anyhow::Ok;
-use arrow::{array::RecordBatch, datatypes::Schema};
+use arrow::array::RecordBatch;
+use dashmap::DashMap;
 
-use crate::now_as_nano;
 
-use super::MemEngine;
+use super::{value::Values, MemEngine};
 
 
 #[derive(Debug)]
 pub(crate) struct MemDBCore {
-    schema_map: BTreeMap<String,Arc<Schema>>,
-    map: BTreeMap<String,RecordBatch>,
+    tables: DashMap<String,DashMap<String,Values>>
 }
 
 impl MemDBCore {
     fn new() -> Self {
         Self {
-            schema_map: BTreeMap::new(),
-            map: BTreeMap::new(),
+            tables: DashMap::new()
         }
     }
 }
 
 impl MemEngine for MemDBCore {
     async fn insert(&mut self,batch: &RecordBatch) -> anyhow::Result<bool> {
-        let schema = batch.schema().clone();
-        let key = now_as_nano().to_string();
-        self.schema_map.insert(key.clone(),schema.clone());
-        self.map.insert(key,batch.clone());
         Ok(true)
     }
 

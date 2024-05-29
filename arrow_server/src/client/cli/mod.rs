@@ -13,7 +13,6 @@ pub enum SubCmd {
 }
 
 #[allow(async_fn_in_trait)]
-
 pub trait Executor {
     async fn execute(&self, client: &mut FlightClient);
 }

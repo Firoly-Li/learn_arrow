@@ -1,5 +1,4 @@
 mod active_file;
-use std::sync::Arc;
 
 use self::active_file::ActiveFile;
 use anyhow::Result;

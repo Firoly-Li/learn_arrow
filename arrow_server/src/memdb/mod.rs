@@ -1,8 +1,12 @@
 mod core;
+mod index;
+mod value;
 
+use std::fmt;
 
 use anyhow::Result;
 use arrow::array::RecordBatch;
+use bytes::Bytes;
 use self::core::MemDBCore;
 
 
@@ -25,4 +29,8 @@ pub trait MemEngine {
 
     async fn delete(&self,key: impl Into<String>) -> Result<bool>;
 
+}
+
+pub trait Value {
+    fn value<T: TryFrom<Bytes> + Clone + fmt::Debug>(&self) -> Result<T>;
 }

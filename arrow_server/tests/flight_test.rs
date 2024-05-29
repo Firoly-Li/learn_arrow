@@ -1,4 +1,4 @@
-use std::{sync::Arc, time::Duration};
+use std::{collections::HashMap, sync::Arc, time::Duration};
 
 use arrow::{
     array::{Int32Array, RecordBatch, UInt64Array},
@@ -80,5 +80,8 @@ fn create_batch() -> RecordBatch {
  */
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn do_get_test() {
-    // 1、创建客户端
+    // 1、启动server
+
 }
+
+

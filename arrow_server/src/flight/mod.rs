@@ -1,20 +1,21 @@
 mod do_get;
 mod do_put;
 mod get_schema;
+mod list_flights;
 
 use arrow::array::RecordBatch;
 use arrow_flight::{
-    encode::FlightDataEncoderBuilder, error::FlightError, flight_descriptor::DescriptorType,
-    flight_service_server::FlightService, utils::flight_data_to_batches, Action, ActionType,
-    BasicAuth, Criteria, Empty, FlightData, FlightDescriptor, FlightEndpoint, FlightInfo,
-    HandshakeRequest, HandshakeResponse, PollInfo, PutResult, SchemaResult, Ticket,
+    encode::FlightDataEncoderBuilder, error::FlightError, flight_descriptor::DescriptorType, flight_service_server::FlightService, utils::flight_data_to_batches, Action, ActionType, BasicAuth, Criteria, Empty, FlightData, FlightDescriptor, FlightEndpoint, FlightInfo, HandshakeRequest, HandshakeResponse, PollInfo, PutResult, SchemaResult, Ticket
 };
 use datafusion::execution::{context::SessionContext, options::ParquetReadOptions};
 use futures::{stream::BoxStream, StreamExt, TryStreamExt};
+use list_flights::create_list_flights;
 use parquet::{arrow::ArrowWriter, basic::Compression, file::properties::WriterProperties};
 use prost::{bytes::Bytes, Message};
 use std::fs::File;
 use tonic::{Request, Response, Status, Streaming};
+
+use crate::flight::do_get::df_to_batchs;
 
 use self::{
     do_get::parse_file_path,
@@ -92,13 +93,35 @@ impl FlightService for FlightServiceImpl {
         &self,
         _request: Request<Criteria>,
     ) -> Result<Response<Self::ListFlightsStream>, Status> {
-        unimplemented!()
+        let infos = create_list_flights();
+        let batchs: Vec<Result<FlightInfo, FlightError>> =
+        infos.iter().map(|x| Ok(x.clone())).collect();
+        let flights_stream = futures::stream::iter(batchs).map_err(Into::into);
+        Ok(Response::new(flights_stream.boxed()))
     }
 
     /**
      * 客户端请求特定数据集的详细信息，服务端返回 FlightInfo，
      * 其中包含数据集的完整 Schema、数据分布情况（如有多个分片）、访问凭证（如有）等
-     *
+     * todo: （当前理解）如果有一批数据是热点数据，服务端会生成相关的FlightInfo，但是数据是动态的，所以FlightInfo都会有过期时间，以避免占用服务端资源。
+     * 
+     * FlightInfo { 
+     *   schema: b"", 
+     *   flight_descriptor: None, 
+     *   endpoint: [
+     *       FlightEndpoint { 
+     *           ticket: Some(Ticket { ticket: b"0" }), 
+     *           location: [], 
+     *           expiration_time: None, 
+     *           app_metadata: b"" 
+     *       }
+     *   ], 
+     *   total_records: 0, 
+     *   total_bytes: 0, 
+     *   ordered: false, 
+     *   app_metadata: b"" 
+     * }
+     * 
      * FlightInfo 是 Apache Arrow Flight 协议中的一个核心数据结构，它用来描述一个可执行的查询或数据传输任务的信息，包含客户端需要知道的所有元数据以发起和处理一次数据交换。下面是 FlightInfo 结构体中一些关键字段及其作用：
      * Schema: 定义了数据的结构，包括列名、数据类型等，让客户端知道即将接收的数据格式。
      * FlightDescriptor: 描述了这次Flight的唯一标识符和类型，可以是命令描述符、路径描述符或命令字符串，帮助客户端和服务器识别特定的查询或数据集。
@@ -189,16 +212,8 @@ impl FlightService for FlightServiceImpl {
                 if let Ok(df) = ctx.read_parquet(fie_path, options).await {
                     println!("df: {:?}", df);
                     // 执行查询并收集结果
-                    let resp = df.collect().await.unwrap();
-
-                    // 将查询结果转换为 Vec<RecordBatch>
-                    // let record_batches: Vec<RecordBatch> = results.into_iter().collect();
-                    // let resp = df.select_columns(&["*"]).unwrap().collect().await.unwrap();
-                    println!("resp: {:?}", resp);
-                    let batchs: Vec<Result<RecordBatch, FlightError>> =
-                        resp.iter().map(|x| Ok(x.clone())).collect();
+                    let batchs = df_to_batchs(df).await;
                     let batch_stream = futures::stream::iter(batchs).map_err(Into::into);
-
                     let stream = FlightDataEncoderBuilder::new()
                         .build(batch_stream)
                         .map_err(Into::into);
@@ -207,7 +222,7 @@ impl FlightService for FlightServiceImpl {
                         .insert("test-resp-header", "some_val".parse().unwrap());
                     Ok(resp)
                 } else {
-                    Err(Status::new(tonic::Code::NotFound, "message"))
+                    Err(Status::new(tonic::Code::NotFound, "read message error"))
                 }
             }
             Err(_e) => Err(Status::new(tonic::Code::NotFound, "message")),
@@ -220,6 +235,7 @@ impl FlightService for FlightServiceImpl {
      * 客户端使用 DoPut 请求将数据上传至服务端。
      * 客户端以流的形式发送包含 Arrow RecordBatch 的数据包，服务端接收并存储这些数据。
      * 这种方式常用于数据导入或实时数据流传输。
+     * todo: 服务端应该生成这批数据的FlightInfo，或者暂存于内存，等经过处理之后生成相关的FlightInfo
      */
     async fn do_put(
         &self,

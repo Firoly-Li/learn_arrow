@@ -1,13 +1,7 @@
 use arrow::{datatypes::Schema, ipc::writer::IpcWriteOptions};
 use arrow_flight::{SchemaAsIpc, SchemaResult};
-use datafusion::{
-    common::DFSchema,
-    execution::{context::SessionContext, options::ParquetReadOptions},
-};
-use prost::{
-    bytes::{Bytes, BytesMut},
-    Message,
-};
+use datafusion::execution::{context::SessionContext, options::ParquetReadOptions};
+use prost::bytes::Bytes;
 use tonic::{Response, Status};
 
 /**
@@ -34,12 +28,12 @@ pub async fn get_schema_by_path(paths: Vec<String>) -> Result<Response<SchemaRes
 
 /**
  * 根据cmd获取schema
- * todo cmd格式：标准sql
+ * todo cmd格式：标准sql(不一定正确)
  * 根据CMD查询具体
  */
 pub async fn get_schema_by_cmd(cmd: Bytes) -> Result<Response<SchemaResult>, Status> {
     let ctx = SessionContext::new();
     let sql = String::from_utf8(cmd.to_vec()).unwrap();
-    let resp = ctx.sql(&sql).await;
+    let _resp = ctx.sql(&sql).await;
     Ok(Response::new(SchemaResult::default()))
 }
