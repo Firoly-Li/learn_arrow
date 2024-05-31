@@ -160,7 +160,7 @@ mod tests {
     #[tokio::test]
     async fn async_write_test() {
         let batch1 = create_batch1();
-        let file = tokio::fs::File::create("test/111.tssp").await.unwrap();
+        let file = tokio::fs::File::create("test/1.tssp").await.unwrap();
         let props = WriterProperties::builder()
             .set_compression(Compression::SNAPPY)
             .build();
