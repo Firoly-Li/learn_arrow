@@ -25,7 +25,7 @@ pub async fn do_put_test(cleint: &mut FlightClient) {
 }
 
 /**
- * 
+ *
  */
 pub async fn do_get_flight_info(cleint: &mut FlightClient) {
     let desc = FlightDescriptor::new_path(vec!["0".to_string()]);
@@ -36,22 +36,16 @@ pub async fn do_get_flight_info(cleint: &mut FlightClient) {
     }
 }
 
-
 pub async fn do_list_flights(cleint: &mut FlightClient) {
     let resp = cleint.list_flights("desc").await;
     match resp {
         Ok(resp) => {
-            let response: Vec<_> = resp
-            .try_collect()
-            .await
-            .expect("Error streaming data");
+            let response: Vec<_> = resp.try_collect().await.expect("Error streaming data");
             println!("flight_info = {:?}", response);
         }
         Err(_) => println!("error"),
     }
 }
-
-
 
 #[derive(Serialize)]
 struct MyStruct {

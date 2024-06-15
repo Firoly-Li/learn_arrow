@@ -7,11 +7,10 @@ use arrow::{
 };
 
 use arrow_flight::{
-    utils::batches_to_flight_data, FlightClient, FlightData, FlightDescriptor,
-    Ticket,
+    utils::batches_to_flight_data, FlightClient, FlightData, FlightDescriptor, Ticket,
 };
 
-use client::do_list_flights;
+use client::{do_list_flights, do_put_test};
 use futures::StreamExt;
 use prost::bytes::{Bytes, BytesMut};
 use prost::Message;
@@ -23,7 +22,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let local_url = "http://127.0.0.1:50051";
     if let Ok(channel) = Channel::from_static(local_url).connect().await {
         let mut client = FlightClient::new(channel);
-        let resp = do_list_flights(&mut client).await;
+        let resp = do_put_test(&mut client).await;
     } else {
         println!("客户端连接失败！");
     }
