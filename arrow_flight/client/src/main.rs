@@ -7,7 +7,7 @@ use arrow::{
 };
 
 use arrow_flight::{
-    utils::batches_to_flight_data, FlightClient, FlightData, FlightDescriptor, HandshakeRequest,
+    utils::batches_to_flight_data, FlightClient, FlightData, FlightDescriptor,
     Ticket,
 };
 

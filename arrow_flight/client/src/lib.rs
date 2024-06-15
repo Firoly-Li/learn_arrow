@@ -40,7 +40,6 @@ pub async fn do_get_flight_info(cleint: &mut FlightClient) {
 pub async fn do_list_flights(cleint: &mut FlightClient) {
     let resp = cleint.list_flights("desc").await;
     match resp {
-        
         Ok(resp) => {
             let response: Vec<_> = resp
             .try_collect()
