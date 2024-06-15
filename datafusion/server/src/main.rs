@@ -1,5 +1,5 @@
 use arrow::{
-    array::{Int32Array, RecordBatch, UInt64Array},
+    array::{BinaryArray, Int32Array, RecordBatch, UInt64Array},
     datatypes::{DataType, Field, Schema},
 };
 use datafusion::{
@@ -39,7 +39,8 @@ async fn api_select_test(table: Arc<MemTable>, context: &SessionContext) {
  * 查询Parquet文件中的指定列的所有数据
  */
 async fn select_test(ctx: &SessionContext) {
-    let table_paths = "/Users/firoly/Documents/code/rust/learn_rust/learn_arrow/datafusion/server/test/0.tssp";
+    let table_paths =
+        "/Users/firoly/Documents/code/rust/learn_rust/learn_arrow/datafusion/server/test/0.tssp";
     let mut options = ParquetReadOptions::default();
     options.file_extension = "tssp";
     if let Ok(df) = ctx.read_parquet(table_paths, options).await {
@@ -47,7 +48,7 @@ async fn select_test(ctx: &SessionContext) {
         // let resp = df.select_columns(&["*"]).unwrap().collect().await.unwrap();
         let resp = df.collect().await.unwrap();
         println!("resp = {:?}", resp);
-    }else {
+    } else {
         println!("read parquet file failed");
     }
 }
@@ -68,7 +69,7 @@ async fn sql_select_test(table: Arc<MemTable>, context: &SessionContext) {
  */
 fn create_memory_table() -> MemTable {
     let schema = Arc::new(Schema::new(vec![
-        Field::new("name", DataType::Int32, false),
+        Field::new("name", DataType::Binary, false),
         Field::new("age", DataType::Int32, false),
         Field::new("address", DataType::Int32, false),
         Field::new("time", DataType::UInt64, true),
@@ -77,7 +78,11 @@ fn create_memory_table() -> MemTable {
     let batch = RecordBatch::try_new(
         schema.clone(),
         vec![
-            Arc::new(Int32Array::from(vec![1, 2, 3])),
+            Arc::new(BinaryArray::from(vec![
+                "tom".to_string().as_bytes(),
+                "fox".to_string().as_bytes(),
+                "jim".to_string().as_bytes(),
+            ])),
             Arc::new(Int32Array::from(vec![4, 5, 6])),
             Arc::new(Int32Array::from(vec![7, 8, 9])),
             Arc::new(UInt64Array::from(vec![None, None, Some(9)])),
@@ -88,7 +93,11 @@ fn create_memory_table() -> MemTable {
     let batch2 = RecordBatch::try_new(
         schema.clone(),
         vec![
-            Arc::new(Int32Array::from(vec![10, 20, 30])),
+            Arc::new(BinaryArray::from(vec![
+                "tom1".to_string().as_bytes(),
+                "fox1".to_string().as_bytes(),
+                "jim".to_string().as_bytes(),
+            ])),
             Arc::new(Int32Array::from(vec![40, 50, 60])),
             Arc::new(Int32Array::from(vec![70, 80, 90])),
             Arc::new(UInt64Array::from(vec![None, None, Some(90)])),

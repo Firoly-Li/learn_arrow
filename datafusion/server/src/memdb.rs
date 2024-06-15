@@ -108,6 +108,12 @@ mod tests {
         }
     }
 
+    #[test]
+    fn print_schema() {
+        let schema = create_schema();
+        println!("schema = {:?}", schema);
+    }
+
     /**
      * 同步写入测试
      */

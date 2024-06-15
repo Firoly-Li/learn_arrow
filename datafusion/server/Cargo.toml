@@ -8,7 +8,7 @@ edition = "2021"
 [dependencies]
 anyhow = "1.0.82"
 arrow = {workspace = true }
-datafusion = "37.1.0"
+datafusion = "38.0.0"
 futures.workspace = true
 futures-util = "0.3.30"
 parquet = { version = "51.0.0", features = ["arrow"] }
