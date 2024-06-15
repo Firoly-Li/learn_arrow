@@ -1,8 +1,7 @@
-use std::fmt;
+use super::Value;
 use bytes::{BufMut, Bytes, BytesMut};
 use parquet::data_type::AsBytes;
-use super::Value;
-
+use std::fmt;
 
 // // 定义一个枚举来表示可能的值类型
 // #[derive(Debug)]
@@ -59,37 +58,43 @@ use super::Value;
 //         let int_value = Value::Int(42);
 //         let float_value = Value::Float(3.14);
 //         let string_value = Value::String("Hello, world!".to_string());
-    
+
 //         println!("int_value: {}", int_value.value::<i32>().unwrap());
 //         println!("float_value: {}", float_value.value::<f64>().unwrap());
 //         println!("string_value: {}", string_value.value::<String>().unwrap());
-    
+
 //     }
 // }
 
 #[derive(Debug, Clone)]
 pub enum VT {
-    Int,Long,Float,Double,String,Bool,Bytes
+    Int,
+    Long,
+    Float,
+    Double,
+    String,
+    Bool,
+    Bytes,
 }
 
 #[derive(Debug, Clone)]
 pub struct Values {
     vt: VT,
-    v: Bytes
+    v: Bytes,
 }
 
 impl Values {
     fn int(v: i32) -> Self {
         Self {
             vt: VT::Int,
-            v: Bytes::from(v.to_be_bytes().to_vec())
+            v: Bytes::from(v.to_be_bytes().to_vec()),
         }
     }
 
     fn string(s: impl Into<String>) -> Self {
         Self {
             vt: VT::String,
-            v: Bytes::from(s.into())
+            v: Bytes::from(s.into()),
         }
     }
 
@@ -98,13 +103,12 @@ impl Values {
         let bytes = Bytes::copy_from_slice(byte_slice);
         Self {
             vt: VT::Bool,
-            v: bytes
+            v: bytes,
         }
     }
 }
 
 impl Value for Values {
-
     fn value<T: TryFrom<Bytes> + Clone + fmt::Debug>(&self) -> anyhow::Result<T> {
         match T::try_from(self.v.clone()) {
             Ok(v) => Ok(v),
@@ -113,11 +117,9 @@ impl Value for Values {
     }
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::Values;
-
 
     #[test]
     fn test() {

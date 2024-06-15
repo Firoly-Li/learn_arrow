@@ -11,14 +11,14 @@ pub(crate) fn parse_file_path(ticket: Ticket) -> Result<String> {
                     .to_string()
                     + p.as_str()
                     + ".tssp";
-            print!("path: {:?}",path);
+            print!("path: {:?}", path);
             Ok(path)
         }
         Err(_e) => Err(anyhow::anyhow!("parse file path error")),
     };
 }
 
-pub(crate) async fn df_to_batchs(df: DataFrame) -> Vec<Result<RecordBatch, FlightError>>{
+pub(crate) async fn df_to_batchs(df: DataFrame) -> Vec<Result<RecordBatch, FlightError>> {
     // 执行查询并收集结果
     let resp = df.collect().await.unwrap();
     let batchs: Vec<Result<RecordBatch, FlightError>> =

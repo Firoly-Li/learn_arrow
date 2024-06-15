@@ -2,56 +2,53 @@ use anyhow::Ok;
 use arrow::array::RecordBatch;
 use dashmap::DashMap;
 
-
 use super::{value::Values, MemEngine};
-
 
 #[derive(Debug)]
 pub(crate) struct MemDBCore {
-    tables: DashMap<String,DashMap<String,Values>>
+    tables: DashMap<String, DashMap<String, Values>>,
 }
 
 impl MemDBCore {
     fn new() -> Self {
         Self {
-            tables: DashMap::new()
+            tables: DashMap::new(),
         }
     }
 }
 
 impl MemEngine for MemDBCore {
-    async fn insert(&mut self,batch: &RecordBatch) -> anyhow::Result<bool> {
+    async fn insert(&mut self, batch: &RecordBatch) -> anyhow::Result<bool> {
         Ok(true)
     }
 
     async fn insert_batch(&mut self, batchs: &Vec<RecordBatch>) -> Vec<anyhow::Result<bool>> {
         let mut results = Vec::new();
         for batch in batchs {
-           results.push(self.insert(batch).await);
+            results.push(self.insert(batch).await);
         }
         results
     }
 
-    async fn get(&self,key: impl Into<String>) -> anyhow::Result<RecordBatch> {
+    async fn get(&self, key: impl Into<String>) -> anyhow::Result<RecordBatch> {
         todo!()
     }
 
-    async fn delete(&self,key: impl Into<String>) -> anyhow::Result<bool> {
+    async fn delete(&self, key: impl Into<String>) -> anyhow::Result<bool> {
         Ok(true)
     }
 }
-
-
-
 
 #[cfg(test)]
 mod tests {
     use std::sync::Arc;
 
-    use arrow::{array::{Int32Array, RecordBatch, UInt64Array}, datatypes::*};
+    use arrow::{
+        array::{Int32Array, RecordBatch, UInt64Array},
+        datatypes::*,
+    };
 
     use crate::memdb::{core::MemDBCore, MemEngine};
-
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn memdb_core_should_be_work() {
@@ -61,7 +58,6 @@ mod tests {
         let _ = db.insert(&batch).await;
         println!("db: {:?}", db);
     }
-
 
     fn create_schema() -> Arc<Schema> {
         let schema = Arc::new(Schema::new(vec![

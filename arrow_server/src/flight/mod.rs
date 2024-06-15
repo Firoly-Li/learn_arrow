@@ -2,10 +2,14 @@ mod do_get;
 mod do_put;
 mod get_schema;
 mod list_flights;
+mod state;
 
 use arrow::array::RecordBatch;
 use arrow_flight::{
-    encode::FlightDataEncoderBuilder, error::FlightError, flight_descriptor::DescriptorType, flight_service_server::FlightService, utils::flight_data_to_batches, Action, ActionType, BasicAuth, Criteria, Empty, FlightData, FlightDescriptor, FlightEndpoint, FlightInfo, HandshakeRequest, HandshakeResponse, PollInfo, PutResult, SchemaResult, Ticket
+    encode::FlightDataEncoderBuilder, error::FlightError, flight_descriptor::DescriptorType,
+    flight_service_server::FlightService, utils::flight_data_to_batches, Action, ActionType,
+    BasicAuth, Criteria, Empty, FlightData, FlightDescriptor, FlightEndpoint, FlightInfo,
+    HandshakeRequest, HandshakeResponse, PollInfo, PutResult, SchemaResult, Ticket,
 };
 use datafusion::execution::{context::SessionContext, options::ParquetReadOptions};
 use futures::{stream::BoxStream, StreamExt, TryStreamExt};
@@ -50,13 +54,6 @@ impl FlightServiceImpl {
 #[tonic::async_trait]
 impl FlightService for FlightServiceImpl {
     type HandshakeStream = BoxStream<'static, Result<HandshakeResponse, Status>>;
-    type ListFlightsStream = BoxStream<'static, Result<FlightInfo, Status>>;
-    type DoGetStream = BoxStream<'static, Result<FlightData, Status>>;
-    type DoPutStream = BoxStream<'static, Result<PutResult, Status>>;
-    type DoActionStream = BoxStream<'static, Result<arrow_flight::Result, Status>>;
-    type ListActionsStream = BoxStream<'static, Result<ActionType, Status>>;
-    type DoExchangeStream = BoxStream<'static, Result<FlightData, Status>>;
-
     async fn handshake(
         &self,
         request: Request<Streaming<HandshakeRequest>>,
@@ -79,12 +76,13 @@ impl FlightService for FlightServiceImpl {
                     payload: Bytes::from("auth success"),
                 };
                 let output = futures::stream::iter(std::iter::once(Ok(handshake_response)));
-                Ok(Response::new(output.boxed()))
+                let stream = output.boxed();
+                Ok(Response::new(stream))
             }
             Err(_e) => Err(Status::ok("message")),
         }
     }
-
+    type ListFlightsStream = BoxStream<'static, Result<FlightInfo, Status>>;
     /**
      * 客户端可以向服务端发送 ListFlights 请求，服务端响应包含可用数据集或服务列表的 FlightInfo 对象。
      * 这些信息通常包括数据集的描述、Schema、分区信息等，帮助客户端了解可访问的数据资源。
@@ -95,33 +93,32 @@ impl FlightService for FlightServiceImpl {
     ) -> Result<Response<Self::ListFlightsStream>, Status> {
         let infos = create_list_flights();
         let batchs: Vec<Result<FlightInfo, FlightError>> =
-        infos.iter().map(|x| Ok(x.clone())).collect();
+            infos.iter().map(|x| Ok(x.clone())).collect();
         let flights_stream = futures::stream::iter(batchs).map_err(Into::into);
         Ok(Response::new(flights_stream.boxed()))
     }
-
     /**
      * 客户端请求特定数据集的详细信息，服务端返回 FlightInfo，
      * 其中包含数据集的完整 Schema、数据分布情况（如有多个分片）、访问凭证（如有）等
      * todo: （当前理解）如果有一批数据是热点数据，服务端会生成相关的FlightInfo，但是数据是动态的，所以FlightInfo都会有过期时间，以避免占用服务端资源。
-     * 
-     * FlightInfo { 
-     *   schema: b"", 
-     *   flight_descriptor: None, 
+     *
+     * FlightInfo {
+     *   schema: b"",
+     *   flight_descriptor: None,
      *   endpoint: [
-     *       FlightEndpoint { 
-     *           ticket: Some(Ticket { ticket: b"0" }), 
-     *           location: [], 
-     *           expiration_time: None, 
-     *           app_metadata: b"" 
+     *       FlightEndpoint {
+     *           ticket: Some(Ticket { ticket: b"0" }),
+     *           location: [],
+     *           expiration_time: None,
+     *           app_metadata: b""
      *       }
-     *   ], 
-     *   total_records: 0, 
-     *   total_bytes: 0, 
-     *   ordered: false, 
-     *   app_metadata: b"" 
+     *   ],
+     *   total_records: 0,
+     *   total_bytes: 0,
+     *   ordered: false,
+     *   app_metadata: b""
      * }
-     * 
+     *
      * FlightInfo 是 Apache Arrow Flight 协议中的一个核心数据结构，它用来描述一个可执行的查询或数据传输任务的信息，包含客户端需要知道的所有元数据以发起和处理一次数据交换。下面是 FlightInfo 结构体中一些关键字段及其作用：
      * Schema: 定义了数据的结构，包括列名、数据类型等，让客户端知道即将接收的数据格式。
      * FlightDescriptor: 描述了这次Flight的唯一标识符和类型，可以是命令描述符、路径描述符或命令字符串，帮助客户端和服务器识别特定的查询或数据集。
@@ -160,14 +157,12 @@ impl FlightService for FlightServiceImpl {
             }
         };
     }
-
     async fn poll_flight_info(
         &self,
         _request: Request<FlightDescriptor>,
     ) -> Result<Response<PollInfo>, Status> {
         unimplemented!()
     }
-
     /**
      * 客户端请求某个数据集的Schema信息，服务端返回详细的Schema定义，便于客户端正确解析接收到的数据。
      */
@@ -183,6 +178,8 @@ impl FlightService for FlightServiceImpl {
             DescriptorType::Cmd => get_schema_by_cmd(request.cmd).await,
         }
     }
+
+    type DoGetStream = BoxStream<'static, Result<FlightData, Status>>;
 
     /**
      * 客户端根据 FlightInfo 发送 DoGet 请求以获取数据。服务端以流的形式返回数据，
@@ -212,8 +209,8 @@ impl FlightService for FlightServiceImpl {
                 if let Ok(df) = ctx.read_parquet(fie_path, options).await {
                     println!("df: {:?}", df);
                     // 执行查询并收集结果
-                    let batchs = df_to_batchs(df).await;
-                    let batch_stream = futures::stream::iter(batchs).map_err(Into::into);
+                    let batches = df_to_batchs(df).await;
+                    let batch_stream = futures::stream::iter(batches).map_err(Into::into);
                     let stream = FlightDataEncoderBuilder::new()
                         .build(batch_stream)
                         .map_err(Into::into);
@@ -230,6 +227,8 @@ impl FlightService for FlightServiceImpl {
 
         // unimplemented!()
     }
+
+    type DoPutStream = BoxStream<'static, Result<PutResult, Status>>;
 
     /**
      * 客户端使用 DoPut 请求将数据上传至服务端。
@@ -255,6 +254,22 @@ impl FlightService for FlightServiceImpl {
         Ok(Response::new(stream.boxed()))
     }
 
+    type DoExchangeStream = BoxStream<'static, Result<FlightData, Status>>;
+
+    /**
+     * 支持客户端和服务端之间进行双向数据流交换。
+     * 双方可以同时发送和接收 Arrow RecordBatch，
+     * 适用于需要实时交互或迭代计算的场景，如查询中间结果的反馈、增量计算等
+     */
+    async fn do_exchange(
+        &self,
+        _request: Request<Streaming<FlightData>>,
+    ) -> Result<Response<Self::DoExchangeStream>, Status> {
+        unimplemented!()
+    }
+
+    type DoActionStream = BoxStream<'static, Result<arrow_flight::Result, Status>>;
+
     /**
      * 用于扩展arrowFlight机制，可以自定义Action
      * 客户端可以发送一个包含特定操作请求的消息（如执行 SQL 查询、触发数据处理任务等）。
@@ -268,22 +283,12 @@ impl FlightService for FlightServiceImpl {
         unimplemented!()
     }
 
+    type ListActionsStream = BoxStream<'static, Result<ActionType, Status>>;
+
     async fn list_actions(
         &self,
         _request: Request<Empty>,
     ) -> Result<Response<Self::ListActionsStream>, Status> {
-        unimplemented!()
-    }
-
-    /**
-     * 支持客户端和服务端之间进行双向数据流交换。
-     * 双方可以同时发送和接收 Arrow RecordBatch，
-     * 适用于需要实时交互或迭代计算的场景，如查询中间结果的反馈、增量计算等
-     */
-    async fn do_exchange(
-        &self,
-        _request: Request<Streaming<FlightData>>,
-    ) -> Result<Response<Self::DoExchangeStream>, Status> {
         unimplemented!()
     }
 }

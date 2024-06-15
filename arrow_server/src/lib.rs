@@ -10,11 +10,12 @@ use tonic::transport::Server;
 
 pub mod client;
 pub mod data_fusion;
+pub mod db;
 pub mod error;
 pub mod flight;
+pub mod memdb;
 pub mod parquet;
 pub mod web;
-pub mod memdb;
 
 /**
  * 启动flight_server

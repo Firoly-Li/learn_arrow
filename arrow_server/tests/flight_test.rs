@@ -82,6 +82,6 @@ fn create_batch() -> RecordBatch {
 async fn do_get_test() {
     // 1、启动server
 
+    let batch = create_batch();
+    println!("batch = {:?}", batch);
 }
-
-

@@ -33,3 +33,5 @@ pub async fn write_batch(batchs: Vec<RecordBatch>) -> Vec<Result<PutResult, Stat
     }
     resp
 }
+
+pub async fn write_to_wal() {}
