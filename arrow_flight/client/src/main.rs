@@ -6,8 +6,12 @@ use arrow::{
     json::ReaderBuilder,
 };
 
-use arrow_flight::{utils::batches_to_flight_data, FlightClient, FlightData, HandshakeRequest, Ticket};
+use arrow_flight::{
+    utils::batches_to_flight_data, FlightClient, FlightData, FlightDescriptor, Ticket,
+};
 
+use client::{do_list_flights, do_put_test};
+use futures::StreamExt;
 use prost::bytes::{Bytes, BytesMut};
 use prost::Message;
 use serde::Serialize;
@@ -15,19 +19,15 @@ use tonic::transport::Channel;
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let remote_url = "http://192.168.3.223:50051";
-    let local_url = "http://localhost:50051";
-    if let Ok(channel) = Channel::from_static(local_url)
-        .connect()
-        .await
-    {
+    let local_url = "http://127.0.0.1:50051";
+    if let Ok(channel) = Channel::from_static(local_url).connect().await {
         let mut client = FlightClient::new(channel);
-        let resp = test_handshake(&mut client).await;
+        let resp = do_put_test(&mut client).await;
     } else {
         println!("客户端连接失败！");
     }
     Ok(())
 }
-
 
 /**
  * 测试握手协议
@@ -50,33 +50,40 @@ async fn test_handshake(client: &mut FlightClient) {
     }
 }
 
+async fn test_get_schema(client: &mut FlightClient) {
+    let desc = FlightDescriptor::new_cmd("0.tssp".as_bytes());
+    let response = client.get_schema(desc).await;
+    println!("服务端返回的消息： {:?}", response);
+}
 
 /**
  * 测试获取数据
  */
 async fn test_do_get(client: &mut FlightClient) {
     let ticket = Ticket {
-        ticket: Bytes::from_static("bytes".as_bytes()),
+        ticket: Bytes::from_static("0".as_bytes()),
     };
-    let resp = client
-            .do_get(ticket)
-            .await
-            .expect("--------------------------------------------------");
+    let mut resp = client
+        .do_get(ticket)
+        .await
+        .expect("--------------------------------------------------");
     println!("resp: {:?}", resp);
+    loop {
+        let r = resp.next().await;
+        if let Some(batch) = r {
+            println!("batch: {:?}", batch);
+        } else {
+            break;
+        }
+    }
 }
-
-
-
-
-
-
 
 #[derive(Serialize)]
 struct MyStruct {
     int32: i32,
     string: String,
 }
-fn create_batch() -> Result<Vec<FlightData>, ArrowError> {
+pub fn create_batch() -> Result<Vec<FlightData>, ArrowError> {
     let schema = Schema::new(vec![
         Field::new("int32", DataType::Int32, false),
         Field::new("string", DataType::Utf8, false),

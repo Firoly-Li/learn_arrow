@@ -1,11 +1,15 @@
+mod db;
 mod executor;
 mod state;
-mod db;
 
-use arrow::{array::{RecordBatch, UInt64Array}, ipc::writer::IpcWriteOptions};
+use arrow::{
+    array::{RecordBatch, UInt64Array},
+    ipc::writer::IpcWriteOptions,
+};
 use arrow_flight::{
     encode::FlightDataEncoderBuilder,
     flight_service_server::{FlightService, FlightServiceServer},
+    utils::flight_data_to_batches,
     Action, ActionType, Criteria, Empty, FlightData, FlightDescriptor, FlightInfo,
     HandshakeRequest, HandshakeResponse, PollInfo, PutResult, SchemaAsIpc, SchemaResult, Ticket,
 };
@@ -13,7 +17,7 @@ use futures::{stream::BoxStream, StreamExt, TryStreamExt};
 use state::State;
 use std::sync::Arc;
 use tokio::sync::Mutex;
-use tonic::{Request, Response, Status, Streaming,Result};
+use tonic::{Request, Response, Result, Status, Streaming};
 
 use crate::executor::Executor;
 
@@ -58,8 +62,9 @@ impl FlightService for FlightServiceImpl {
     type ListActionsStream = BoxStream<'static, Result<ActionType, Status>>;
     type DoExchangeStream = BoxStream<'static, Result<FlightData, Status>>;
 
-
-    
+    /**
+     * 客户端向服务端发送 HandshakeRequest，服务端响应 HandshakeResponse。
+     */
     async fn handshake(
         &self,
         request: Request<Streaming<HandshakeRequest>>,
@@ -73,15 +78,15 @@ impl FlightService for FlightServiceImpl {
                 // 3、构建 response
                 let output = futures::stream::iter(std::iter::once(Ok(handshake_response)));
                 Ok(Response::new(output.boxed()))
-            },
+            }
             Err(status) => Err(status),
-            
         }
     }
 
     /**
      * 客户端可以向服务端发送 ListFlights 请求，服务端响应包含可用数据集或服务列表的 FlightInfo 对象。
      * 这些信息通常包括数据集的描述、Schema、分区信息等，帮助客户端了解可访问的数据资源。
+     * TODO
      */
     async fn list_flights(
         &self,
@@ -96,6 +101,7 @@ impl FlightService for FlightServiceImpl {
     /**
      * 客户端请求特定数据集的详细信息，服务端返回 FlightInfo，
      * 其中包含数据集的完整 Schema、数据分布情况（如有多个分片）、访问凭证（如有）等
+     * TODO
      */
     async fn get_flight_info(
         &self,
@@ -112,6 +118,9 @@ impl FlightService for FlightServiceImpl {
         Ok(Response::new(response))
     }
 
+    /**
+     * TODO
+     */
     async fn poll_flight_info(
         &self,
         request: Request<FlightDescriptor>,
@@ -160,7 +169,7 @@ impl FlightService for FlightServiceImpl {
         request: Request<Ticket>,
     ) -> Result<Response<Self::DoGetStream>, Status> {
         let resp = request.into_inner().execute();
-        
+
         let batch_stream = futures::stream::iter(resp).map_err(Into::into);
 
         let stream = FlightDataEncoderBuilder::new()
@@ -184,7 +193,8 @@ impl FlightService for FlightServiceImpl {
         request: Request<Streaming<FlightData>>,
     ) -> Result<Response<Self::DoPutStream>, Status> {
         let do_put_request: Vec<_> = request.into_inner().try_collect().await?;
-
+        let batch = flight_data_to_batches(&do_put_request);
+        println!("batch: {:?}", batch);
         let mut state = self.state.lock().await;
         state.do_put_request = Some(do_put_request);
 

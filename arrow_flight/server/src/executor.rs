@@ -1,14 +1,17 @@
-
 use std::sync::Arc;
 
-use arrow::{array::RecordBatch, datatypes::{DataType, Field, Schema}, json::ReaderBuilder};
+use arrow::{
+    array::RecordBatch,
+    datatypes::{DataType, Field, Schema},
+    json::ReaderBuilder,
+};
 use arrow_flight::{
     Criteria, FlightDescriptor, FlightInfo, HandshakeRequest, HandshakeResponse, Ticket,
 };
 
 use prost::bytes::Bytes;
 use serde::Serialize;
-use tonic::{Request, Status,Result};
+use tonic::{Request, Result, Status};
 
 /**
  * 执行器
@@ -39,7 +42,7 @@ impl Executor for HandshakeRequest {
  */
 impl Executor for Criteria {
     // type Response = Result<Vec<FlightInfo>, Status>;
-    type Response = Vec<Result<FlightInfo,Status>>;
+    type Response = Vec<Result<FlightInfo, Status>>;
     fn execute(&self) -> Self::Response {
         let infos = vec![
             Ok(test_flight_info(&FlightDescriptor::new_cmd("foo"))),
@@ -61,11 +64,8 @@ fn test_flight_info(request: &FlightDescriptor) -> FlightInfo {
     }
 }
 
-
-
-
-impl Executor for Ticket  {
-    type Response = Vec<Result<RecordBatch,Status>>;
+impl Executor for Ticket {
+    type Response = Vec<Result<RecordBatch, Status>>;
 
     fn execute(&self) -> Self::Response {
         let mut vecs = Vec::new();
@@ -75,14 +75,13 @@ impl Executor for Ticket  {
     }
 }
 
-
 #[derive(Serialize)]
 struct MyStruct {
     int32: i32,
     string: String,
 }
 
-fn create_batch(n: i32) -> Result<RecordBatch ,Status> {
+fn create_batch(n: i32) -> Result<RecordBatch, Status> {
     let schema = Schema::new(vec![
         Field::new("int32", DataType::Int32, false),
         Field::new("string", DataType::Utf8, false),
